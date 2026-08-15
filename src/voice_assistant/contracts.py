@@ -32,3 +32,13 @@ class LLMProvider(Protocol):
 class TTSProvider(Protocol):
     def synthesize(self, text: str, output_path: Path) -> Path:
         ...
+
+
+class UtteranceRecorder(Protocol):
+    def record(self, output_path: Path) -> Path:
+        ...
+
+
+class AudioPlayer(Protocol):
+    def play(self, audio_path: Path) -> None:
+        ...

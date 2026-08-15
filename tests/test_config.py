@@ -20,7 +20,20 @@ class ConfigTest(unittest.TestCase):
             "Qwen/Qwen2.5-1.5B-Instruct",
         )
         self.assertEqual(config.llm.max_new_tokens, 128)
-        self.assertEqual(config.tts.provider, "edge_tts")
+        self.assertEqual(config.tts.provider, "kokoro")
+        self.assertEqual(config.tts.model, "hexgrad/Kokoro-82M")
+        self.assertEqual(config.tts.language_code, "z")
+        self.assertEqual(config.tts.default_voice, "zf_xiaoxiao")
+        self.assertEqual(config.tts.sample_rate, 24000)
+        self.assertEqual(config.tts.output_format, "wav")
+        self.assertEqual(config.audio.sample_rate, 16000)
+        self.assertEqual(
+            config.audio.playback_backend,
+            "sounddevice",
+        )
+        self.assertEqual(config.audio.frame_duration_ms, 20)
+        self.assertEqual(config.audio.vad_mode, 2)
+        self.assertEqual(config.audio.end_silence_ms, 800)
         self.assertEqual(config.runtime.output_dir, Path("output"))
 
 if  __name__ == "__main__":

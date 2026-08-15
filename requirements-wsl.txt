@@ -1,0 +1,26 @@
+# Minimal WSL runtime for local SenseVoice + Qwen + Kokoro.
+# Install the correct CUDA build of torch and torchaudio separately first.
+
+# Configuration and model loading
+PyYAML==6.0.2
+PySocks==1.7.1
+accelerate==0.33.0
+transformers==4.45.2
+tokenizers==0.20.1
+safetensors==0.4.5
+huggingface-hub==0.26.1
+sentencepiece==0.2.0
+
+# ASR
+funasr==1.1.12
+modelscope==1.15.0
+librosa==0.10.2.post1
+kaldiio==2.18.0
+
+# Local TTS and audio
+kokoro==0.9.4
+misaki[zh]==0.9.4
+numpy==1.26.3
+soundfile==0.12.1
+sounddevice==0.5.1
+webrtcvad-wheels==2.0.14

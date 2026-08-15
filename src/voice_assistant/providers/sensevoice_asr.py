@@ -14,6 +14,7 @@ class SenseVoiceASR:
         model_name: str,
         language: str = "auto",
         use_itn: bool = False,
+        device: str | None = None,
         model: SenseVoiceModel | None = None,
     ) -> None:
         self._language = language
@@ -22,7 +23,16 @@ class SenseVoiceASR:
         if model is None:
             from funasr import AutoModel
 
-            self._model = AutoModel(model=model_name, trust_remote_code=True)
+            model_path = Path(model_name).expanduser()
+            model_options: dict[str, Any] = {
+                "model": model_name,
+                "trust_remote_code": not model_path.is_dir(),
+                "disable_update": True,
+            }
+            if device is not None:
+                model_options["device"] = device
+
+            self._model = AutoModel(**model_options)
         else:
             self._model = model
     
