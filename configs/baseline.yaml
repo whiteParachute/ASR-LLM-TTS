@@ -1,0 +1,19 @@
+asr:
+  provider: sensevoice
+  model: iic/SenseVoiceSmall
+  language: auto
+  use_itn: false
+
+llm:
+  provider: qwen25_transformers
+  model: Qwen/Qwen2.5-1.5B-Instruct
+  max_new_tokens: 128
+  system_prompt: 你是一个友好的中文语音助手
+  reply_instruction: 回答简短一些，保持在50字以内。
+
+tts:
+  provider: edge_tts
+  default_voice: zh-CN-XiaoyiNeural
+
+runtime:
+  output_dir: output
