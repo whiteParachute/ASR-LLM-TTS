@@ -84,7 +84,6 @@ import importlib.util
 packages = (
     "torch",
     "torchaudio",
-    "funasr",
     "transformers",
     "sounddevice",
     "soundfile",

@@ -3,7 +3,7 @@
 The current modular runtime is a fully local, half-duplex voice loop:
 
 ```text
-Windows microphone -> WebRTC VAD -> SenseVoiceSmall
+Windows microphone -> WebRTC VAD -> Qwen3-ASR-0.6B-hf
                    -> Qwen3.5-4B (NF4 4-bit, non-thinking)
                    -> Qwen3-TTS-0.6B Base -> Windows speakers
 ```
@@ -36,7 +36,7 @@ python scripts/download_wsl_models.py
 The WSL configuration expects these local directories:
 
 ```text
-models/SenseVoiceSmall
+models/Qwen3-ASR-0.6B-hf
 models/Qwen3.5-4B
 models/Qwen3-TTS-12Hz-0.6B-Base
 ```
