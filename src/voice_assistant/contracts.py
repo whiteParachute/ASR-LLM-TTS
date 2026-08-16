@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, Protocol, Sequence
+from typing import Iterable, Iterator, Literal, Protocol, Sequence
 
 Role = Literal["user", "system", "assistant"]
 
@@ -30,6 +30,28 @@ class PreparedResponse:
     reply: str
 
 
+@dataclass(frozen=True, slots=True)
+class AudioChunk:
+    pcm_s16le: bytes
+    sample_rate: int
+    channels: int = 1
+
+    def __post_init__(self) -> None:
+        if not self.pcm_s16le:
+            raise ValueError("Audio chunk cannot be empty.")
+        if self.sample_rate < 1:
+            raise ValueError("Audio chunk sample rate must be positive.")
+        if self.channels < 1:
+            raise ValueError("Audio chunk channels must be positive.")
+        if len(self.pcm_s16le) % (2 * self.channels) != 0:
+            raise ValueError("Audio chunk contains incomplete PCM frames.")
+
+    @property
+    def duration_ms(self) -> float:
+        frame_count = len(self.pcm_s16le) / (2 * self.channels)
+        return frame_count / self.sample_rate * 1000
+
+
 class ASRProvider(Protocol):
     def transcribe(self, audio_path: Path) -> str:
         ...
@@ -45,6 +67,11 @@ class TTSProvider(Protocol):
         ...
 
 
+class StreamingTTSProvider(TTSProvider, Protocol):
+    def stream_synthesize(self, text: str) -> Iterator[AudioChunk]:
+        ...
+
+
 class UtteranceRecorder(Protocol):
     def record(self, output_path: Path) -> Path:
         ...
@@ -52,4 +79,9 @@ class UtteranceRecorder(Protocol):
 
 class AudioPlayer(Protocol):
     def play(self, audio_path: Path) -> None:
+        ...
+
+
+class StreamingAudioPlayer(AudioPlayer, Protocol):
+    def play_stream(self, chunks: Iterable[AudioChunk]) -> None:
         ...

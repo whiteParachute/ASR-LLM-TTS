@@ -69,5 +69,29 @@ class ConfigTest(unittest.TestCase):
         self.assertTrue(config.observability.jsonl)
         self.assertEqual(config.observability.log_dir, Path("logs"))
 
+    def test_loads_cosyvoice3_wsl_streaming_config(self) -> None:
+        config = load_config(
+            PROJECT_ROOT / "configs" / "wsl_cuda.yaml"
+        )
+
+        self.assertEqual(
+            config.tts.provider,
+            "cosyvoice3_stream_worker",
+        )
+        self.assertEqual(
+            config.tts.model,
+            "models/Fun-CosyVoice3-0.5B-2512",
+        )
+        self.assertEqual(
+            config.tts.worker_python,
+            ".venv-cosyvoice/bin/python",
+        )
+        self.assertEqual(
+            config.tts.runtime_dir,
+            Path(".runtime/CosyVoice"),
+        )
+        self.assertEqual(config.tts.dtype, "float16")
+        self.assertEqual(config.tts.startup_timeout_seconds, 300)
+
 if  __name__ == "__main__":
     unittest.main()

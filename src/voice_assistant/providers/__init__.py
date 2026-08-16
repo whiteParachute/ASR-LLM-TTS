@@ -1,4 +1,5 @@
 from .edge_tts_provider import EdgeTTSProvider
+from .cosyvoice3_stream_worker import CosyVoice3StreamingWorkerProvider
 from .kokoro_tts_provider import KokoroTTSProvider
 from .qwen3_tts_worker import Qwen3TTSWorkerProvider
 from .qwen3_asr import Qwen3ASR
@@ -14,6 +15,7 @@ from .sensevoice_asr import SenseVoiceASR
 
 __all__ = [
     "EdgeTTSProvider",
+    "CosyVoice3StreamingWorkerProvider",
     "KokoroTTSProvider",
     "Qwen3TTSWorkerProvider",
     "Qwen3ASR",

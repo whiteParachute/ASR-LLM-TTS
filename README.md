@@ -5,14 +5,15 @@ The current modular runtime is a fully local, half-duplex voice loop:
 ```text
 Windows microphone -> WebRTC VAD -> Qwen3-ASR-0.6B-hf
                    -> Qwen3.5-4B (NF4 4-bit, non-thinking)
-                   -> Qwen3-TTS-0.6B Base -> Windows speakers
+                   -> Fun-CosyVoice3-0.5B -> Windows speakers
 ```
 
 The tested WSL2 stack uses Python 3.11, PyTorch 2.11 with CUDA 12.8,
 and an NVIDIA RTX 3080 12 GB. The installers create project-local
-`.venv` and `.venv-tts` environments; they do not replace Ubuntu's
-system Python. Qwen3-TTS stays isolated because its Transformers 4.x
-dependency conflicts with the Qwen3.5 runtime's Transformers 5.x.
+`.venv`, `.venv-tts`, and `.venv-cosyvoice` environments; they do not
+replace Ubuntu's system Python. Speech models stay isolated because
+their Transformers 4.x dependencies conflict with the Qwen3.5
+runtime's Transformers 5.x.
 
 ## WSL2 setup
 
@@ -22,7 +23,7 @@ Keep the repository on the Linux filesystem, for example:
 cd ~/projects/ASR-LLM-TTS
 ./scripts/doctor_wsl.sh
 ./scripts/install_wsl_runtime.sh
-./scripts/install_wsl_tts_runtime.sh
+./scripts/install_wsl_cosyvoice_runtime.sh
 ```
 
 Download only the files required by the local model stack from
@@ -38,10 +39,10 @@ The WSL configuration expects these local directories:
 ```text
 models/Qwen3-ASR-0.6B-hf
 models/Qwen3.5-4B
-models/Qwen3-TTS-12Hz-0.6B-Base
+models/Fun-CosyVoice3-0.5B-2512
 ```
 
-Qwen3-TTS Base clones a reference voice. Before startup, prepare the
+CosyVoice3 clones a reference voice. Before startup, prepare the
 reference WAV and its exact transcript as described in
 `voices/README.md`. The public Qwen sample configured by default can be
 downloaded with:
@@ -53,8 +54,11 @@ curl --fail --location \
   https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen3-TTS-Repo/clone.wav
 ```
 
-The TTS model and its cached voice prompt run in one persistent worker;
-they are not reloaded for each conversation turn.
+The TTS model and its precomputed reference-voice prompt run in one
+persistent worker; they are not reloaded for each conversation turn.
+The official CosyVoice runtime is pinned under `.runtime/CosyVoice` by
+the installer instead of using the older CosyVoice 1 source retained
+from the upstream project.
 
 Start continuous microphone conversation:
 
@@ -67,12 +71,12 @@ after 800 ms of silence, processes the turn, plays the reply through
 WSLg PulseAudio, and then listens for the next turn. Press `Ctrl+C` to
 stop.
 
-Realtime replies are split at natural punctuation with a configurable
-maximum chunk size. The first chunk is synthesized immediately; while
-it is playing, the persistent TTS worker synthesizes the next chunk.
-This is application-level pipelining because the current open-source
-Qwen3-TTS inference API returns a complete waveform for each request.
-Tune the limit with `runtime.reply_chunk_max_chars`.
+CosyVoice3 returns PCM audio chunks as they are generated. One
+persistent `paplay --raw` process receives those chunks and plays them
+without waiting for a complete WAV. The same chunks are also written to
+one reply WAV for debugging. Non-streaming TTS providers retain the
+punctuation-based fallback controlled by
+`runtime.reply_chunk_max_chars`.
 
 Run the test suite with:
 
@@ -88,8 +92,8 @@ model weights under `models/`; both are ignored by Git.
 ## Performance observability v1
 
 Each conversation turn now prints privacy-safe stage timings for
-recording, ASR, LLM generation, each TTS and playback chunk, reply
-preparation, time to first audio, and the full post-recording turn.
+recording, ASR, LLM generation, streaming TTS, streaming playback,
+reply preparation, time to first audio, and the full post-recording turn.
 Model loading is measured separately so cold-start time is not mixed
 into steady-state conversation latency.
 

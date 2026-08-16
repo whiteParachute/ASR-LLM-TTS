@@ -40,6 +40,10 @@ tensorboard
 # Clangd files
 .cache
 compile_commands.json
+.runtime/
+.venv/
+.venv-tts/
+.venv-cosyvoice/
 
 # train/inference files
 *.wav

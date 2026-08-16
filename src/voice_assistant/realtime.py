@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import argparse
+import wave
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import nullcontext
 from contextvars import copy_context
+from dataclasses import dataclass
+from itertools import chain
 from pathlib import Path
-from typing import Protocol
+from typing import Iterator, Protocol
 
 from voice_assistant.audio import (
     PaplayAudioPlayer,
@@ -17,6 +20,7 @@ from voice_assistant.bootstrap import build_pipeline
 from voice_assistant.config import AppConfig, load_config
 from voice_assistant.contracts import (
     AudioPlayer,
+    AudioChunk,
     PipelineResult,
     PreparedResponse,
     UtteranceRecorder,
@@ -44,8 +48,21 @@ class TurnPipeline(Protocol):
     ) -> Path:
         ...
 
+    @property
+    def supports_streaming_tts(self) -> bool:
+        ...
+
+    def stream_synthesize(self, text: str) -> Iterator[AudioChunk]:
+        ...
+
 
 ResultObserver = Callable[[PreparedResponse], None]
+
+
+@dataclass(slots=True)
+class _AudioStreamStats:
+    chunk_count: int = 0
+    duration_ms: float = 0.0
 
 
 class RealtimeVoiceAssistant:
@@ -110,51 +127,142 @@ class RealtimeVoiceAssistant:
                 "turn_total",
                 audio_duration_ms=input_audio_duration,
             ) as turn_span:
-                with measure_stage(
-                    self._performance,
-                    "time_to_first_audio",
-                ) as first_audio_span:
-                    with measure_stage(
-                        self._performance,
-                        "response_prepare",
-                    ):
-                        prepared = self._pipeline.prepare(recorded_path)
-
-                    chunks = split_reply_text(
-                        prepared.reply,
-                        max_chars=self._reply_chunk_max_chars,
+                if self._can_stream_audio():
+                    result = self._run_streaming_turn(
+                        recorded_path=recorded_path,
+                        reply_path=reply_path,
                     )
-                    if not chunks:
-                        raise ValueError("LLM returned an empty reply.")
-                    chunk_paths = _build_chunk_paths(reply_path, len(chunks))
-
-                    if self._result_observer is not None:
-                        self._result_observer(prepared)
-
-                    first_path = self._pipeline.synthesize(
-                        chunks[0],
-                        chunk_paths[0],
-                        chunk_index=1,
-                        chunk_count=len(chunks),
+                    turn_span.add_fields(
+                        reply_chunks=len(result.audio_paths),
+                        streaming_audio=True,
                     )
-                    first_audio_span.add_fields(
-                        reply_chunks=len(chunks),
-                        first_chunk_chars=len(chunks[0]),
-                        audio_duration_ms=wav_duration_ms(first_path),
-                    )
+                    return result
 
-                generated_paths = self._play_with_prefetch(
-                    chunks=chunks,
-                    chunk_paths=chunk_paths,
-                    first_path=first_path,
+                result = self._run_chunked_turn(
+                    recorded_path=recorded_path,
+                    reply_path=reply_path,
                 )
-                turn_span.add_fields(reply_chunks=len(chunks))
-                return PipelineResult(
-                    transcript=prepared.transcript,
-                    reply=prepared.reply,
-                    audio_path=generated_paths[0],
-                    audio_paths=tuple(generated_paths),
+                turn_span.add_fields(
+                    reply_chunks=len(result.audio_paths),
+                    streaming_audio=False,
                 )
+                return result
+
+    def _run_chunked_turn(
+        self,
+        *,
+        recorded_path: Path,
+        reply_path: Path,
+    ) -> PipelineResult:
+        with measure_stage(
+            self._performance,
+            "time_to_first_audio",
+        ) as first_audio_span:
+            with measure_stage(
+                self._performance,
+                "response_prepare",
+            ):
+                prepared = self._pipeline.prepare(recorded_path)
+
+            chunks = split_reply_text(
+                prepared.reply,
+                max_chars=self._reply_chunk_max_chars,
+            )
+            if not chunks:
+                raise ValueError("LLM returned an empty reply.")
+            chunk_paths = _build_chunk_paths(reply_path, len(chunks))
+
+            if self._result_observer is not None:
+                self._result_observer(prepared)
+
+            first_path = self._pipeline.synthesize(
+                chunks[0],
+                chunk_paths[0],
+                chunk_index=1,
+                chunk_count=len(chunks),
+            )
+            first_audio_span.add_fields(
+                reply_chunks=len(chunks),
+                first_chunk_chars=len(chunks[0]),
+                audio_duration_ms=wav_duration_ms(first_path),
+            )
+
+        generated_paths = self._play_with_prefetch(
+            chunks=chunks,
+            chunk_paths=chunk_paths,
+            first_path=first_path,
+        )
+        return PipelineResult(
+            transcript=prepared.transcript,
+            reply=prepared.reply,
+            audio_path=generated_paths[0],
+            audio_paths=tuple(generated_paths),
+        )
+
+    def _run_streaming_turn(
+        self,
+        *,
+        recorded_path: Path,
+        reply_path: Path,
+    ) -> PipelineResult:
+        with measure_stage(
+            self._performance,
+            "time_to_first_audio",
+            streaming_audio=True,
+        ) as first_audio_span:
+            with measure_stage(
+                self._performance,
+                "response_prepare",
+            ):
+                prepared = self._pipeline.prepare(recorded_path)
+
+            if self._result_observer is not None:
+                self._result_observer(prepared)
+
+            audio_chunks = self._pipeline.stream_synthesize(prepared.reply)
+            try:
+                first_chunk = next(audio_chunks)
+            except StopIteration as exc:
+                raise RuntimeError(
+                    "Streaming TTS returned no audio chunks"
+                ) from exc
+            first_audio_span.add_fields(
+                first_chunk_duration_ms=round(
+                    first_chunk.duration_ms,
+                    3,
+                ),
+                sample_rate=first_chunk.sample_rate,
+            )
+
+        stats = _AudioStreamStats()
+        recorded_chunks = _record_audio_stream(
+            chunks=chain((first_chunk,), audio_chunks),
+            output_path=reply_path,
+            stats=stats,
+        )
+        play_stream = getattr(self._player, "play_stream")
+        with measure_stage(
+            self._performance,
+            "playback_stream",
+            streaming_audio=True,
+        ) as playback_span:
+            play_stream(recorded_chunks)
+            playback_span.add_fields(
+                chunk_count=stats.chunk_count,
+                audio_duration_ms=round(stats.duration_ms, 3),
+            )
+
+        return PipelineResult(
+            transcript=prepared.transcript,
+            reply=prepared.reply,
+            audio_path=reply_path,
+            audio_paths=(reply_path,),
+        )
+
+    def _can_stream_audio(self) -> bool:
+        return bool(
+            getattr(self._pipeline, "supports_streaming_tts", False)
+        ) and callable(getattr(self._player, "play_stream", None))
 
     def _play_with_prefetch(
         self,
@@ -297,6 +405,38 @@ def _submit_synthesis(
             chunk_count=chunk_count,
         ),
     )
+
+
+def _record_audio_stream(
+    *,
+    chunks: Iterator[AudioChunk],
+    output_path: Path,
+    stats: _AudioStreamStats,
+) -> Iterator[AudioChunk]:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    expected_sample_rate: int | None = None
+    expected_channels: int | None = None
+
+    with wave.open(str(output_path), "wb") as audio_file:
+        for chunk in chunks:
+            if expected_sample_rate is None:
+                expected_sample_rate = chunk.sample_rate
+                expected_channels = chunk.channels
+                audio_file.setnchannels(chunk.channels)
+                audio_file.setsampwidth(2)
+                audio_file.setframerate(chunk.sample_rate)
+            elif (
+                chunk.sample_rate != expected_sample_rate
+                or chunk.channels != expected_channels
+            ):
+                raise RuntimeError(
+                    "Streaming TTS changed audio format between chunks"
+                )
+
+            audio_file.writeframesraw(chunk.pcm_s16le)
+            stats.chunk_count += 1
+            stats.duration_ms += chunk.duration_ms
+            yield chunk
 
 
 def build_parser() -> argparse.ArgumentParser:

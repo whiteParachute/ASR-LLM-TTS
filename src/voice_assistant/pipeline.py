@@ -1,7 +1,9 @@
 from pathlib import Path
+from typing import Iterator
 
 from .contracts import (
     ASRProvider,
+    AudioChunk,
     LLMProvider,
     Message,
     PipelineResult,
@@ -95,6 +97,35 @@ class VoicePipeline:
             )
 
         return synthesized_path
+
+    @property
+    def supports_streaming_tts(self) -> bool:
+        return callable(getattr(self._tts, "stream_synthesize", None))
+
+    def stream_synthesize(self, text: str) -> Iterator[AudioChunk]:
+        stream_synthesize = getattr(self._tts, "stream_synthesize", None)
+        if not callable(stream_synthesize):
+            raise RuntimeError("Configured TTS provider does not stream audio")
+        if not text.strip():
+            raise ValueError("TTS received empty text.")
+
+        with measure_stage(
+            self._performance,
+            "tts_stream",
+            text_chars=len(text),
+        ) as tts_span:
+            chunk_count = 0
+            audio_duration_ms = 0.0
+            for chunk in stream_synthesize(text):
+                chunk_count += 1
+                audio_duration_ms += chunk.duration_ms
+                yield chunk
+            if chunk_count == 0:
+                raise RuntimeError("Streaming TTS returned no audio chunks")
+            tts_span.add_fields(
+                chunk_count=chunk_count,
+                audio_duration_ms=round(audio_duration_ms, 3),
+            )
 
     def run(self, audio_path: Path, output_path: Path) -> PipelineResult:
         prepared = self.prepare(audio_path)

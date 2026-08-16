@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock
 
-from voice_assistant.contracts import PreparedResponse
+from voice_assistant.contracts import AudioChunk, PreparedResponse
 from voice_assistant.realtime import RealtimeVoiceAssistant
 from voice_assistant.observability import PerformanceLogger, measure_stage
 
@@ -128,6 +128,25 @@ class InstrumentedFakePipeline(FakePipeline):
             )
 
 
+class FakeStreamingPipeline(FakePipeline):
+    @property
+    def supports_streaming_tts(self) -> bool:
+        return True
+
+    def stream_synthesize(self, text: str):
+        yield AudioChunk(b"\x01\x00\x02\x00", sample_rate=24000)
+        yield AudioChunk(b"\x03\x00\x04\x00", sample_rate=24000)
+
+
+class FakeStreamingPlayer(FakePlayer):
+    def __init__(self) -> None:
+        super().__init__()
+        self.streamed_chunks: list[AudioChunk] = []
+
+    def play_stream(self, chunks) -> None:
+        self.streamed_chunks.extend(chunks)
+
+
 class RealtimeVoiceAssistantTest(unittest.TestCase):
     def test_continues_after_recoverable_turn_error(self) -> None:
         assistant = RealtimeVoiceAssistant(
@@ -199,6 +218,28 @@ class RealtimeVoiceAssistantTest(unittest.TestCase):
         ])
         self.assertEqual(player.audio_paths, list(result.audio_paths))
         self.assertEqual(len(result.audio_paths), 2)
+
+    def test_streams_audio_and_saves_one_complete_wav(self) -> None:
+        player = FakeStreamingPlayer()
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir) / "turns"
+            assistant = RealtimeVoiceAssistant(
+                pipeline=FakeStreamingPipeline(),
+                recorder=FakeRecorder(),
+                player=player,
+                output_dir=output_dir,
+            )
+
+            result = assistant.run_turn()
+
+            self.assertEqual(len(player.streamed_chunks), 2)
+            self.assertEqual(
+                result.audio_path,
+                output_dir / "turn_0001_reply.wav",
+            )
+            self.assertTrue(result.audio_path.is_file())
+            self.assertEqual(result.audio_paths, (result.audio_path,))
 
     def test_records_realtime_stage_sequence_with_one_turn_id(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -278,6 +319,48 @@ class RealtimeVoiceAssistantTest(unittest.TestCase):
         self.assertTrue(
             all(event["turn_id"] == "turn_0001" for event in tts_events)
         )
+
+    def test_records_streaming_realtime_stage_sequence(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            performance = PerformanceLogger(
+                enabled=True,
+                console=False,
+                jsonl=True,
+                log_dir=temp_path / "logs",
+                session_id="streaming-session",
+            )
+            assistant = RealtimeVoiceAssistant(
+                pipeline=FakeStreamingPipeline(),
+                recorder=FakeRecorder(),
+                player=FakeStreamingPlayer(),
+                output_dir=temp_path / "turns",
+                performance=performance,
+            )
+
+            assistant.run_turn()
+            assistant.close()
+
+            events = [
+                json.loads(line)
+                for line in (temp_path / "logs" / "performance.jsonl")
+                .read_text(encoding="utf-8")
+                .splitlines()
+            ]
+
+        self.assertEqual(
+            [event["stage"] for event in events],
+            [
+                "record",
+                "response_prepare",
+                "time_to_first_audio",
+                "playback_stream",
+                "turn_total",
+            ],
+        )
+        first_audio_event = events[2]
+        self.assertTrue(first_audio_event["streaming_audio"])
+        self.assertEqual(first_audio_event["sample_rate"], 24000)
 
 
 if __name__ == "__main__":

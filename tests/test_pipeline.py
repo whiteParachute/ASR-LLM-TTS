@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from typing import Sequence
 
-from voice_assistant.contracts import Message, PipelineResult
+from voice_assistant.contracts import AudioChunk, Message, PipelineResult
 from voice_assistant.pipeline import VoicePipeline
 from voice_assistant.observability import PerformanceLogger
 
@@ -38,6 +38,13 @@ class FakeTTS:
         self.received_text = text
         self.received_path = output_path
         return output_path
+
+
+class FakeStreamingTTS(FakeTTS):
+    def stream_synthesize(self, text: str):
+        self.received_text = text
+        yield AudioChunk(b"\x01\x00\x02\x00", sample_rate=24000)
+        yield AudioChunk(b"\x03\x00\x04\x00", sample_rate=24000)
 
 
 class VoicePipelineTest(unittest.TestCase):
@@ -107,6 +114,21 @@ class VoicePipelineTest(unittest.TestCase):
         self.assertEqual(prepared.transcript, "问题")
         self.assertEqual(prepared.reply, "先得到文字，再生成语音。")
         self.assertEqual(tts.received_text, "")
+
+    def test_streams_tts_chunks_when_provider_supports_it(self) -> None:
+        tts = FakeStreamingTTS()
+        pipeline = VoicePipeline(
+            asr=FakeASR(transcript="问题"),
+            llm=FakeLLM(reply="流式回答"),
+            tts=tts,
+            system_prompt="测试助手",
+        )
+
+        chunks = list(pipeline.stream_synthesize("流式回答"))
+
+        self.assertTrue(pipeline.supports_streaming_tts)
+        self.assertEqual(len(chunks), 2)
+        self.assertEqual(tts.received_text, "流式回答")
 
     def test_stops_when_asr_returns_empty_text(self) -> None:
         # Arrange

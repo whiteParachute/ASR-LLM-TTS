@@ -3,6 +3,9 @@ from __future__ import annotations
 from voice_assistant.config import ASRConfig, LLMConfig, TTSConfig
 from voice_assistant.contracts import ASRProvider, LLMProvider, TTSProvider
 from voice_assistant.providers.edge_tts_provider import EdgeTTSProvider
+from voice_assistant.providers.cosyvoice3_stream_worker import (
+    CosyVoice3StreamingWorkerProvider,
+)
 from voice_assistant.providers.kokoro_tts_provider import KokoroTTSProvider
 from voice_assistant.providers.qwen3_tts_worker import Qwen3TTSWorkerProvider
 from voice_assistant.providers.qwen3_asr import Qwen3ASR
@@ -77,6 +80,18 @@ def build_tts(config: TTSConfig) -> TTSProvider:
             dtype=config.dtype,
             attention_implementation=config.attention_implementation,
             max_new_tokens=config.max_new_tokens,
+            startup_timeout_seconds=config.startup_timeout_seconds,
+        )
+    if config.provider == "cosyvoice3_stream_worker":
+        return CosyVoice3StreamingWorkerProvider(
+            model_name=config.model,
+            runtime_dir=config.runtime_dir,
+            reference_audio=config.reference_audio,
+            reference_text=config.reference_text,
+            worker_python=config.worker_python,
+            worker_script=config.worker_script,
+            fp16=config.dtype == "float16",
+            warmup_text=config.warmup_text,
             startup_timeout_seconds=config.startup_timeout_seconds,
         )
     raise ProviderConfigError(f"Unsupported TTS provider: {config.provider}")

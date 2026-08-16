@@ -185,6 +185,43 @@ class ProviderFactoryTest(unittest.TestCase):
         )
         self.assertIs(provider, mock_qwen3_tts.return_value)
 
+    @patch(
+        "voice_assistant.providers.factory."
+        "CosyVoice3StreamingWorkerProvider"
+    )
+    def test_builds_cosyvoice3_stream_worker(
+        self,
+        mock_cosyvoice3,
+    ) -> None:
+        config = TTSConfig(
+            provider="cosyvoice3_stream_worker",
+            model="models/Fun-CosyVoice3-0.5B-2512",
+            default_voice="reference",
+            worker_python=".venv-cosyvoice/bin/python",
+            worker_script="scripts/cosyvoice3_stream_worker.py",
+            runtime_dir=Path(".runtime/CosyVoice"),
+            reference_audio=Path("voices/reference.wav"),
+            reference_text="参考音频文本。",
+            dtype="float16",
+            startup_timeout_seconds=300.0,
+            warmup_text="预热语音。",
+        )
+
+        provider = build_tts(config)
+
+        mock_cosyvoice3.assert_called_once_with(
+            model_name="models/Fun-CosyVoice3-0.5B-2512",
+            runtime_dir=Path(".runtime/CosyVoice"),
+            reference_audio=Path("voices/reference.wav"),
+            reference_text="参考音频文本。",
+            worker_python=".venv-cosyvoice/bin/python",
+            worker_script="scripts/cosyvoice3_stream_worker.py",
+            fp16=True,
+            warmup_text="预热语音。",
+            startup_timeout_seconds=300.0,
+        )
+        self.assertIs(provider, mock_cosyvoice3.return_value)
+
     def test_rejects_unknown_tts_provider(self) -> None:
         config = TTSConfig(provider="unknown_provider", default_voice="test-voice")
         with self.assertRaisesRegex(ProviderConfigError, "Unsupported TTS provider: unknown_provider"):

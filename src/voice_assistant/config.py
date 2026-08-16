@@ -52,6 +52,7 @@ class TTSConfig:
     device: str | None = None
     worker_python: str = ".venv-tts/bin/python"
     worker_script: str = "scripts/qwen3_tts_worker.py"
+    runtime_dir: Path = Path(".runtime/CosyVoice")
     reference_audio: Path | None = None
     reference_text: str = ""
     x_vector_only_mode: bool = False
@@ -59,6 +60,7 @@ class TTSConfig:
     attention_implementation: str = "sdpa"
     max_new_tokens: int = 256
     startup_timeout_seconds: float = 180.0
+    warmup_text: str = "你好，很高兴和你对话。"
 
 
 @dataclass(frozen=True, slots=True)
@@ -183,6 +185,9 @@ def load_config(config_path: Path) -> AppConfig:
                     "worker_script",
                     "scripts/qwen3_tts_worker.py",
                 ),
+                runtime_dir=Path(
+                    tts.get("runtime_dir", ".runtime/CosyVoice")
+                ),
                 reference_audio=(
                     Path(tts["reference_audio"])
                     if tts.get("reference_audio")
@@ -202,6 +207,10 @@ def load_config(config_path: Path) -> AppConfig:
                 startup_timeout_seconds=tts.get(
                     "startup_timeout_seconds",
                     180.0,
+                ),
+                warmup_text=tts.get(
+                    "warmup_text",
+                    "你好，很高兴和你对话。",
                 ),
             ),
             runtime=RuntimeConfig(

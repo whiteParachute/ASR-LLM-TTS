@@ -158,7 +158,7 @@ class PerformanceLogger:
 
         audio_duration = event.get("audio_duration_ms")
         if (
-            stage in {"asr", "tts"}
+            stage in {"asr", "tts", "tts_stream"}
             and isinstance(audio_duration, (int, float))
             and audio_duration > 0
         ):
@@ -249,8 +249,11 @@ def _format_console_event(event: dict[str, Any]) -> str:
         "text_chars",
         "reply_chunks",
         "first_chunk_chars",
+        "first_chunk_duration_ms",
         "chunk_index",
         "chunk_count",
+        "sample_rate",
+        "streaming_audio",
         "error_type",
     ):
         if key in event:

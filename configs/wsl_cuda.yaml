@@ -23,24 +23,24 @@ llm:
   reply_instruction: 用自然口语直接回答，尽量不超过35个汉字；不要复述问题。
 
 tts:
-  provider: qwen3_tts_worker
-  model: models/Qwen3-TTS-12Hz-0.6B-Base
+  provider: cosyvoice3_stream_worker
+  model: models/Fun-CosyVoice3-0.5B-2512
   language_code: Chinese
   default_voice: reference
   sample_rate: 24000
   output_format: wav
   device: cuda:0
-  worker_python: .venv-tts/bin/python
-  worker_script: scripts/qwen3_tts_worker.py
+  worker_python: .venv-cosyvoice/bin/python
+  worker_script: scripts/cosyvoice3_stream_worker.py
+  runtime_dir: .runtime/CosyVoice
   reference_audio: voices/reference.wav
   reference_text: >-
     Okay. Yeah. I resent you. I love you. I respect you. But you know what?
     You blew it! And thanks to you.
   x_vector_only_mode: false
-  dtype: bfloat16
-  attention_implementation: sdpa
-  max_new_tokens: 256
-  startup_timeout_seconds: 180
+  dtype: float16
+  startup_timeout_seconds: 300
+  warmup_text: 你好，很高兴和你对话。
 
 audio:
   playback_backend: paplay

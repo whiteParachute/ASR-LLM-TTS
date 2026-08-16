@@ -84,9 +84,14 @@ DOWNLOADS = {
             "vocab.json",
         ),
     ),
+    "cosyvoice3": ModelDownload(
+        repo_id="FunAudioLLM/Fun-CosyVoice3-0.5B-2512",
+        local_dir=Path("models/Fun-CosyVoice3-0.5B-2512"),
+        files=(),
+    ),
 }
 
-DEFAULT_DOWNLOADS = ("qwen_asr_hf", "qwen", "qwen_tts")
+DEFAULT_DOWNLOADS = ("qwen_asr_hf", "qwen", "cosyvoice3")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -108,10 +113,13 @@ def main() -> int:
     for name in args.models:
         download = DOWNLOADS[name]
         print(f"Downloading {name}: {download.repo_id}")
+        options = {}
+        if download.files:
+            options["allow_file_pattern"] = list(download.files)
         model_path = snapshot_download(
             download.repo_id,
             local_dir=str(download.local_dir),
-            allow_file_pattern=list(download.files),
+            **options,
         )
         print(f"Ready: {model_path}")
     return 0
