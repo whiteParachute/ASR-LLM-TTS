@@ -10,11 +10,11 @@ from .contracts import (
 
 class VoicePipeline:
     def __init__(
-        self, 
-        asr: ASRProvider, 
-        llm: LLMProvider, 
-        tts: TTSProvider, 
-        system_prompt: str, 
+        self,
+        asr: ASRProvider,
+        llm: LLMProvider,
+        tts: TTSProvider,
+        system_prompt: str,
         reply_instructions: str = "",
     ) -> None:
         self._asr = asr

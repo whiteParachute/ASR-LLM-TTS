@@ -35,11 +35,11 @@ class SenseVoiceASR:
             self._model = AutoModel(**model_options)
         else:
             self._model = model
-    
+
     def transcribe(self, audio_path: Path) -> str:
         if not audio_path.is_file():
             raise FileNotFoundError(f"Audio file does not exist: {audio_path}")
-        
+
         result = self._model.generate(
             input=str(audio_path),
             cache={},
