@@ -27,12 +27,27 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(config.llm.temperature, 0.7)
         self.assertEqual(config.llm.top_p, 0.8)
         self.assertEqual(config.llm.top_k, 20)
-        self.assertEqual(config.tts.provider, "kokoro")
-        self.assertEqual(config.tts.model, "hexgrad/Kokoro-82M")
-        self.assertEqual(config.tts.language_code, "z")
-        self.assertEqual(config.tts.default_voice, "zf_xiaoxiao")
+        self.assertEqual(config.tts.provider, "qwen3_tts_worker")
+        self.assertEqual(
+            config.tts.model,
+            "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
+        )
+        self.assertEqual(config.tts.language_code, "Chinese")
+        self.assertEqual(config.tts.default_voice, "reference")
         self.assertEqual(config.tts.sample_rate, 24000)
         self.assertEqual(config.tts.output_format, "wav")
+        self.assertEqual(
+            config.tts.worker_python,
+            ".venv-tts/bin/python",
+        )
+        self.assertEqual(
+            config.tts.reference_audio,
+            Path("voices/reference.wav"),
+        )
+        self.assertIn("I resent you", config.tts.reference_text)
+        self.assertFalse(config.tts.x_vector_only_mode)
+        self.assertEqual(config.tts.dtype, "bfloat16")
+        self.assertEqual(config.tts.attention_implementation, "sdpa")
         self.assertEqual(config.audio.sample_rate, 16000)
         self.assertEqual(
             config.audio.playback_backend,

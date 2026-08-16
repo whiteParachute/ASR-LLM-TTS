@@ -5,12 +5,14 @@ The current modular runtime is a fully local, half-duplex voice loop:
 ```text
 Windows microphone -> WebRTC VAD -> SenseVoiceSmall
                    -> Qwen3.5-4B (NF4 4-bit, non-thinking)
-                   -> Kokoro-82M -> Windows speakers
+                   -> Qwen3-TTS-0.6B Base -> Windows speakers
 ```
 
 The tested WSL2 stack uses Python 3.11, PyTorch 2.11 with CUDA 12.8,
-and an NVIDIA RTX 3080 12 GB. The installer creates a project-local
-`.venv`; it does not replace Ubuntu's system Python.
+and an NVIDIA RTX 3080 12 GB. The installers create project-local
+`.venv` and `.venv-tts` environments; they do not replace Ubuntu's
+system Python. Qwen3-TTS stays isolated because its Transformers 4.x
+dependency conflicts with the Qwen3.5 runtime's Transformers 5.x.
 
 ## WSL2 setup
 
@@ -20,6 +22,7 @@ Keep the repository on the Linux filesystem, for example:
 cd ~/projects/ASR-LLM-TTS
 ./scripts/doctor_wsl.sh
 ./scripts/install_wsl_runtime.sh
+./scripts/install_wsl_tts_runtime.sh
 ```
 
 Download only the files required by the local model stack from
@@ -35,8 +38,23 @@ The WSL configuration expects these local directories:
 ```text
 models/SenseVoiceSmall
 models/Qwen3.5-4B
-models/Kokoro-82M
+models/Qwen3-TTS-12Hz-0.6B-Base
 ```
+
+Qwen3-TTS Base clones a reference voice. Before startup, prepare the
+reference WAV and its exact transcript as described in
+`voices/README.md`. The public Qwen sample configured by default can be
+downloaded with:
+
+```bash
+mkdir -p voices
+curl --fail --location \
+  --output voices/reference.wav \
+  https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen3-TTS-Repo/clone.wav
+```
+
+The TTS model and its cached voice prompt run in one persistent worker;
+they are not reloaded for each conversation turn.
 
 Start continuous microphone conversation:
 

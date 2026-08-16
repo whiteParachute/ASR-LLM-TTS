@@ -20,14 +20,23 @@ llm:
   reply_instruction: 回答简短一些，保持在50字以内。
 
 tts:
-  provider: kokoro
-  model: models/Kokoro-82M
-  language_code: z
-  default_voice: zf_xiaoxiao
-  speed: 1.0
+  provider: qwen3_tts_worker
+  model: models/Qwen3-TTS-12Hz-0.6B-Base
+  language_code: Chinese
+  default_voice: reference
   sample_rate: 24000
   output_format: wav
-  device: cuda
+  device: cuda:0
+  worker_python: .venv-tts/bin/python
+  worker_script: scripts/qwen3_tts_worker.py
+  reference_audio: voices/reference.wav
+  reference_text: >-
+    Okay. Yeah. I resent you. I love you. I respect you. But you know what?
+    You blew it! And thanks to you.
+  x_vector_only_mode: false
+  dtype: bfloat16
+  attention_implementation: sdpa
+  startup_timeout_seconds: 180
 
 audio:
   playback_backend: paplay

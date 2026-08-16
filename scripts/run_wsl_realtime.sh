@@ -16,6 +16,20 @@ if [[ ! -x .venv/bin/voice-assistant-realtime ]]; then
     exit 2
 fi
 
+if [[ ! -x .venv-tts/bin/python ]]; then
+    printf '%s\n' \
+        'The isolated Qwen3-TTS environment is missing.' \
+        'Run ./scripts/install_wsl_tts_runtime.sh first.' >&2
+    exit 3
+fi
+
+if [[ ! -f voices/reference.wav ]]; then
+    printf '%s\n' \
+        'The Qwen3-TTS reference voice is missing: voices/reference.wav' \
+        'See voices/README.md before starting the assistant.' >&2
+    exit 4
+fi
+
 export PATH="/usr/lib/wsl/lib:$PATH"
 if [[ -z "${PULSE_SERVER:-}" && -S /mnt/wslg/PulseServer ]]; then
     export PULSE_SERVER=unix:/mnt/wslg/PulseServer

@@ -54,7 +54,26 @@ DOWNLOADS = {
             "vocab.json",
         ),
     ),
+    "qwen_tts": ModelDownload(
+        repo_id="Qwen/Qwen3-TTS-12Hz-0.6B-Base",
+        local_dir=Path("models/Qwen3-TTS-12Hz-0.6B-Base"),
+        files=(
+            "config.json",
+            "generation_config.json",
+            "merges.txt",
+            "model.safetensors",
+            "preprocessor_config.json",
+            "speech_tokenizer/config.json",
+            "speech_tokenizer/configuration.json",
+            "speech_tokenizer/model.safetensors",
+            "speech_tokenizer/preprocessor_config.json",
+            "tokenizer_config.json",
+            "vocab.json",
+        ),
+    ),
 }
+
+DEFAULT_DOWNLOADS = ("sensevoice", "qwen", "qwen_tts")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -65,7 +84,7 @@ def build_parser() -> argparse.ArgumentParser:
         "models",
         nargs="*",
         choices=tuple(DOWNLOADS),
-        default=list(DOWNLOADS),
+        default=list(DEFAULT_DOWNLOADS),
         help="Models to download; defaults to the complete local stack.",
     )
     return parser

@@ -1,0 +1,2 @@
+# Qwen3-TTS uses Transformers 4.x and must stay outside the main environment.
+qwen-tts==0.1.1

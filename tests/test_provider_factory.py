@@ -1,4 +1,5 @@
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from voice_assistant.config import ASRConfig, LLMConfig, TTSConfig
@@ -127,6 +128,35 @@ class ProviderFactoryTest(unittest.TestCase):
             device=None,
         )
         self.assertIs(provider, mock_kokoro_tts.return_value)
+
+    @patch("voice_assistant.providers.factory.Qwen3TTSWorkerProvider")
+    def test_builds_qwen3_tts_worker(self, mock_qwen3_tts) -> None:
+        config = TTSConfig(
+            provider="qwen3_tts_worker",
+            model="models/Qwen3-TTS-12Hz-0.6B-Base",
+            language_code="Chinese",
+            default_voice="reference",
+            device="cuda:0",
+            reference_audio=Path("voices/reference.wav"),
+            reference_text="参考音频文本。",
+        )
+
+        provider = build_tts(config)
+
+        mock_qwen3_tts.assert_called_once_with(
+            model_name="models/Qwen3-TTS-12Hz-0.6B-Base",
+            reference_audio=Path("voices/reference.wav"),
+            reference_text="参考音频文本。",
+            language="Chinese",
+            device="cuda:0",
+            worker_python=".venv-tts/bin/python",
+            worker_script="scripts/qwen3_tts_worker.py",
+            x_vector_only_mode=False,
+            dtype="bfloat16",
+            attention_implementation="sdpa",
+            startup_timeout_seconds=180.0,
+        )
+        self.assertIs(provider, mock_qwen3_tts.return_value)
 
     def test_rejects_unknown_tts_provider(self) -> None:
         config = TTSConfig(provider="unknown_provider", default_voice="test-voice")
