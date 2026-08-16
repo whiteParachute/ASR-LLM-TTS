@@ -85,11 +85,11 @@ class Qwen35LLM:
                     bnb_4bit_use_double_quant=True,
                 )
 
+            self._processor = AutoProcessor.from_pretrained(model_name)
             self._model = AutoModelForMultimodalLM.from_pretrained(
                 model_name,
                 **model_kwargs,
             )
-            self._processor = AutoProcessor.from_pretrained(model_name)
         else:
             self._model = model
             self._processor = processor

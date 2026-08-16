@@ -1,5 +1,5 @@
 # Minimal WSL runtime for local SenseVoice + Qwen + Kokoro.
-# Install the correct CUDA build of torch and torchaudio separately first.
+# Install matching CUDA builds of torch, torchaudio, and torchvision first.
 
 # Configuration and model loading
 PyYAML==6.0.2

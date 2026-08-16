@@ -8,6 +8,7 @@ fi
 
 python_version="${PYTHON_VERSION:-3.11}"
 torch_version="${TORCH_VERSION:-2.11.0}"
+torchvision_version="${TORCHVISION_VERSION:-0.26.0}"
 pytorch_index_url="${PYTORCH_INDEX_URL:-https://download.pytorch.org/whl/cu128}"
 pypi_index_url="${PYPI_INDEX_URL:-https://pypi.org/simple}"
 uv_version="${UV_VERSION:-0.11.32}"
@@ -89,6 +90,7 @@ fi
 "$uv_bin" pip install --python .venv/bin/python \
     "torch==${torch_version}" \
     "torchaudio==${torch_version}" \
+    "torchvision==${torchvision_version}" \
     --find-links "$pytorch_index_url" \
     --index-url "$pypi_index_url"
 "$uv_bin" pip install --python .venv/bin/python \
