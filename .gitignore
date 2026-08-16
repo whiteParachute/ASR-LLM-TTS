@@ -48,5 +48,6 @@ compile_commands.json
 *.pt
 pretrained_models/*
 models/
+logs/
 *_pb2_grpc.py
 *_pb2.py

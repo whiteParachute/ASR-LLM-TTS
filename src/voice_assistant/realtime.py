@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 from collections.abc import Callable
+from contextlib import nullcontext
 from pathlib import Path
 from typing import Protocol
 
@@ -16,6 +17,12 @@ from voice_assistant.contracts import (
     AudioPlayer,
     PipelineResult,
     UtteranceRecorder,
+)
+from voice_assistant.observability import (
+    PerformanceLogger,
+    build_performance_logger,
+    measure_stage,
+    wav_duration_ms,
 )
 
 
@@ -38,6 +45,7 @@ class RealtimeVoiceAssistant:
         output_dir: Path,
         output_format: str = "wav",
         result_observer: ResultObserver | None = None,
+        performance: PerformanceLogger | None = None,
     ) -> None:
         self._pipeline = pipeline
         self._recorder = recorder
@@ -45,7 +53,14 @@ class RealtimeVoiceAssistant:
         self._output_dir = output_dir
         self._output_format = output_format.lstrip(".")
         self._result_observer = result_observer
+        self._performance = performance
         self._turn_number = 0
+
+    @property
+    def performance_log_path(self) -> Path | None:
+        if self._performance is None:
+            return None
+        return self._performance.log_path
 
     def run_turn(self) -> PipelineResult:
         self._turn_number += 1
@@ -56,16 +71,45 @@ class RealtimeVoiceAssistant:
             / f"{turn_name}_reply.{self._output_format}"
         )
 
-        recorded_path = self._recorder.record(input_path)
-        result = self._pipeline.run(
-            audio_path=recorded_path,
-            output_path=reply_path,
+        turn_context = (
+            self._performance.turn(turn_name)
+            if self._performance is not None
+            else nullcontext()
         )
+        with turn_context:
+            with measure_stage(
+                self._performance,
+                "record",
+            ) as record_span:
+                recorded_path = self._recorder.record(input_path)
+                input_audio_duration = wav_duration_ms(recorded_path)
+                record_span.add_fields(
+                    audio_duration_ms=input_audio_duration,
+                )
 
-        if self._result_observer is not None:
-            self._result_observer(result)
-        self._player.play(result.audio_path)
-        return result
+            with measure_stage(
+                self._performance,
+                "turn_total",
+                audio_duration_ms=input_audio_duration,
+            ):
+                with measure_stage(
+                    self._performance,
+                    "response_prepare",
+                ):
+                    result = self._pipeline.run(
+                        audio_path=recorded_path,
+                        output_path=reply_path,
+                    )
+
+                if self._result_observer is not None:
+                    self._result_observer(result)
+                with measure_stage(
+                    self._performance,
+                    "playback",
+                    audio_duration_ms=wav_duration_ms(result.audio_path),
+                ):
+                    self._player.play(result.audio_path)
+                return result
 
     def run_forever(self) -> None:
         while True:
@@ -77,9 +121,21 @@ class RealtimeVoiceAssistant:
                 print(f"本轮已跳过：{exc}")
                 continue
 
+    def close(self) -> None:
+        if self._performance is not None:
+            self._performance.close()
+
 
 def build_realtime_assistant(config: AppConfig) -> RealtimeVoiceAssistant:
-    pipeline = build_pipeline(config)
+    performance = build_performance_logger(config.observability)
+    with measure_stage(
+        performance,
+        "model_load",
+        asr_model=config.asr.model,
+        llm_model=config.llm.model,
+        tts_model=config.tts.model,
+    ):
+        pipeline = build_pipeline(config, performance=performance)
     recorder = SoundDeviceVADRecorder(
         sample_rate=config.audio.sample_rate,
         frame_duration_ms=config.audio.frame_duration_ms,
@@ -110,6 +166,7 @@ def build_realtime_assistant(config: AppConfig) -> RealtimeVoiceAssistant:
         output_dir=config.runtime.output_dir / "turns",
         output_format=config.tts.output_format,
         result_observer=_print_result,
+        performance=performance,
     )
 
 
@@ -138,11 +195,15 @@ def main() -> int:
     print("正在加载本地模型……")
     assistant = build_realtime_assistant(config)
     print("模型加载完成，请对着麦克风说话；按 Ctrl+C 退出。")
+    if assistant.performance_log_path is not None:
+        print(f"性能日志：{assistant.performance_log_path}")
 
     try:
         assistant.run_forever()
     except KeyboardInterrupt:
         print("\n语音助手已停止。")
+    finally:
+        assistant.close()
 
     return 0
 

@@ -1,7 +1,7 @@
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import ANY, patch
 
 from voice_assistant.cli import execute
 from voice_assistant.config import (
@@ -72,7 +72,10 @@ class CLITest(unittest.TestCase):
                 )
 
             load_config_mock.assert_called_once_with(config_path)
-            build_pipeline_mock.assert_called_once_with(config)
+            build_pipeline_mock.assert_called_once_with(
+                config,
+                performance=ANY,
+            )
             pipeline.run.assert_called_once_with(
                 audio_path=audio_path,
                 output_path=expected_output_path,

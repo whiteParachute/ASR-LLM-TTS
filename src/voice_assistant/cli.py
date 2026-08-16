@@ -6,6 +6,10 @@ from pathlib import Path
 from voice_assistant.bootstrap import build_pipeline
 from voice_assistant.config import load_config
 from voice_assistant.contracts import PipelineResult
+from voice_assistant.observability import (
+    build_performance_logger,
+    measure_stage,
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -53,12 +57,28 @@ def execute(
         )
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    pipeline = build_pipeline(config)
+    performance = build_performance_logger(config.observability)
+    try:
+        with measure_stage(
+            performance,
+            "model_load",
+            asr_model=config.asr.model,
+            llm_model=config.llm.model,
+            tts_model=config.tts.model,
+        ):
+            pipeline = build_pipeline(
+                config,
+                performance=performance,
+            )
 
-    return pipeline.run(
-        audio_path=audio_path,
-        output_path=output_path,
-    )
+        with performance.turn("turn_0001"):
+            with measure_stage(performance, "turn_total"):
+                return pipeline.run(
+                    audio_path=audio_path,
+                    output_path=output_path,
+                )
+    finally:
+        performance.close()
 
 
 def main() -> int:

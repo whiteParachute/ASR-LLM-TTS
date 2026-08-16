@@ -60,6 +60,33 @@ The WSL-specific runtime settings are in `configs/wsl_cuda.yaml`.
 Generated recordings and replies are written under `output/wsl/` and
 model weights under `models/`; both are ignored by Git.
 
+## Performance observability v1
+
+Each conversation turn now prints privacy-safe stage timings for
+recording, ASR, LLM generation, TTS, reply preparation, playback, and
+the full post-recording turn. Model loading is measured separately so
+cold-start time is not mixed into steady-state conversation latency.
+
+The WSL profile appends structured events to:
+
+```text
+logs/wsl/performance.jsonl
+```
+
+Every event includes a `session_id`, `turn_id`, stage, status, and
+duration. ASR and TTS events also include audio duration and real-time
+factor when the audio is a readable WAV file. Transcript and reply text
+are deliberately excluded from performance logs.
+
+Inspect the latest events after a test conversation with:
+
+```bash
+tail -n 30 logs/wsl/performance.jsonl
+```
+
+Observability settings can be changed under `observability` in the YAML
+configuration. The generated `logs/` directory is ignored by Git.
+
 ## Original project notes
 
 # 环境配置详细教程 [B站](https://www.bilibili.com/video/BV1HucueQEJo/)

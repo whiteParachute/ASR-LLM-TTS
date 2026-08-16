@@ -35,6 +35,10 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(config.audio.vad_mode, 2)
         self.assertEqual(config.audio.end_silence_ms, 800)
         self.assertEqual(config.runtime.output_dir, Path("output"))
+        self.assertTrue(config.observability.enabled)
+        self.assertTrue(config.observability.console)
+        self.assertTrue(config.observability.jsonl)
+        self.assertEqual(config.observability.log_dir, Path("logs"))
 
 if  __name__ == "__main__":
     unittest.main()
