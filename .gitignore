@@ -47,5 +47,6 @@ compile_commands.json
 *.aac
 *.pt
 pretrained_models/*
+models/
 *_pb2_grpc.py
 *_pb2.py

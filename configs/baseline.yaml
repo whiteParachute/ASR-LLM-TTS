@@ -1,0 +1,34 @@
+asr:
+  provider: sensevoice
+  model: iic/SenseVoiceSmall
+  language: auto
+  use_itn: false
+
+llm:
+  provider: qwen25_transformers
+  model: Qwen/Qwen2.5-1.5B-Instruct
+  max_new_tokens: 128
+  system_prompt: 你是一个友好的中文语音助手
+  reply_instruction: 回答简短一些，保持在50字以内。
+
+tts:
+  provider: kokoro
+  model: hexgrad/Kokoro-82M
+  language_code: z
+  default_voice: zf_xiaoxiao
+  speed: 1.0
+  sample_rate: 24000
+  output_format: wav
+
+audio:
+  sample_rate: 16000
+  frame_duration_ms: 20
+  vad_mode: 2
+  start_trigger_ms: 60
+  end_silence_ms: 800
+  pre_roll_ms: 200
+  speech_timeout_seconds: 30.0
+  max_utterance_seconds: 30.0
+
+runtime:
+  output_dir: output

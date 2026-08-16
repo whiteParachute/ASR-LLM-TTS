@@ -1,3 +1,67 @@
+# Modular local voice assistant (WSL2)
+
+The current modular runtime is a fully local, half-duplex voice loop:
+
+```text
+Windows microphone -> WebRTC VAD -> SenseVoiceSmall
+                   -> Qwen2.5-1.5B-Instruct
+                   -> Kokoro-82M -> Windows speakers
+```
+
+The tested WSL2 stack uses Python 3.11, PyTorch 2.11 with CUDA 12.8,
+and an NVIDIA RTX 3080 12 GB. The installer creates a project-local
+`.venv`; it does not replace Ubuntu's system Python.
+
+## WSL2 setup
+
+Keep the repository on the Linux filesystem, for example:
+
+```bash
+cd ~/projects/ASR-LLM-TTS
+./scripts/doctor_wsl.sh
+./scripts/install_wsl_runtime.sh
+```
+
+Download only the files required by the local model stack from
+ModelScope:
+
+```bash
+source .venv/bin/activate
+python scripts/download_wsl_models.py
+```
+
+The WSL configuration expects these local directories:
+
+```text
+models/SenseVoiceSmall
+models/Qwen2.5-1.5B-Instruct
+models/Kokoro-82M
+```
+
+Start continuous microphone conversation:
+
+```bash
+./scripts/run_wsl_realtime.sh
+```
+
+Speak after the startup message. The recorder starts on speech, stops
+after 800 ms of silence, processes the turn, plays the reply through
+WSLg PulseAudio, and then listens for the next turn. Press `Ctrl+C` to
+stop.
+
+Run the test suite with:
+
+```bash
+PYTHONPATH=src .venv/bin/python -m unittest discover \
+  -s tests -p 'test_*.py' -v
+```
+
+The WSL-specific runtime settings are in `configs/wsl_cuda.yaml`.
+Generated recordings and replies are written under `output/wsl/` and
+model weights under `models/`; both are ignored by Git.
+
+## Original project notes
+
 # 环境配置详细教程 [B站](https://www.bilibili.com/video/BV1HucueQEJo/)
 
 0. anaconda\ffmpeg安装

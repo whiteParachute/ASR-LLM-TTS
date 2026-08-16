@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "local-voice-assistant"
+version = "0.1.0"
+description = "A modular local SenseVoice, Qwen, and Kokoro voice assistant"
+requires-python = ">=3.11,<3.13"
+
+[project.scripts]
+voice-assistant = "voice_assistant.cli:main"
+voice-assistant-realtime = "voice_assistant.realtime:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

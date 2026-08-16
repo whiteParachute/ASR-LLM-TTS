@@ -19,6 +19,7 @@ openai-whisper==20231117
 librosa==0.10.2.post1
 soundfile==0.12.1
 sounddevice==0.5.1
+webrtcvad-wheels==2.0.14
 kaldiio==2.18.0
 onnxruntime==1.19.2
 
@@ -31,6 +32,8 @@ mistral_common==1.5.1
 
 # === TTS ===
 edge-tts==6.1.17
+kokoro==0.9.4
+misaki[zh]==0.9.4
 pyttsx3==2.98
 pydub==0.25.1
 
