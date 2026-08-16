@@ -1,3 +1,4 @@
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -5,6 +6,7 @@ from unittest.mock import Mock
 
 from voice_assistant.contracts import PipelineResult
 from voice_assistant.realtime import RealtimeVoiceAssistant
+from voice_assistant.observability import PerformanceLogger
 
 
 class FakeRecorder:
@@ -87,6 +89,42 @@ class RealtimeVoiceAssistantTest(unittest.TestCase):
 
         self.assertEqual(result.transcript, "你好")
         self.assertEqual(observed, [result])
+
+    def test_records_realtime_stage_sequence_with_one_turn_id(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            performance = PerformanceLogger(
+                enabled=True,
+                console=False,
+                jsonl=True,
+                log_dir=temp_path / "logs",
+                session_id="realtime-session",
+            )
+            assistant = RealtimeVoiceAssistant(
+                pipeline=FakePipeline(),
+                recorder=FakeRecorder(),
+                player=FakePlayer(),
+                output_dir=temp_path / "turns",
+                performance=performance,
+            )
+
+            assistant.run_turn()
+            assistant.close()
+
+            events = [
+                json.loads(line)
+                for line in (temp_path / "logs" / "performance.jsonl")
+                .read_text(encoding="utf-8")
+                .splitlines()
+            ]
+
+        self.assertEqual(
+            [event["stage"] for event in events],
+            ["record", "response_prepare", "playback", "turn_total"],
+        )
+        self.assertTrue(
+            all(event["turn_id"] == "turn_0001" for event in events)
+        )
 
 
 if __name__ == "__main__":

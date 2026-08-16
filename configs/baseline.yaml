@@ -32,3 +32,9 @@ audio:
 
 runtime:
   output_dir: output
+
+observability:
+  enabled: true
+  console: true
+  jsonl: true
+  log_dir: logs

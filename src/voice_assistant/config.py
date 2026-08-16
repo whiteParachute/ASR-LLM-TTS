@@ -47,6 +47,14 @@ class RuntimeConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class ObservabilityConfig:
+    enabled: bool = False
+    console: bool = True
+    jsonl: bool = True
+    log_dir: Path = Path("logs")
+
+
+@dataclass(frozen=True, slots=True)
 class AudioConfig:
     playback_backend: str = "sounddevice"
     sample_rate: int = 16000
@@ -68,6 +76,9 @@ class AppConfig:
     tts: TTSConfig
     runtime: RuntimeConfig
     audio: AudioConfig = field(default_factory=AudioConfig)
+    observability: ObservabilityConfig = field(
+        default_factory=ObservabilityConfig,
+    )
 
 
 def _get_section(
@@ -98,6 +109,11 @@ def load_config(config_path: Path) -> AppConfig:
     audio = raw_config.get("audio", {})
     if not isinstance(audio, dict):
         raise ConfigError("Missing or Invalid config session: audio")
+    observability = raw_config.get("observability", {})
+    if not isinstance(observability, dict):
+        raise ConfigError(
+            "Missing or Invalid config session: observability"
+        )
 
     try:
         return AppConfig(
@@ -149,6 +165,12 @@ def load_config(config_path: Path) -> AppConfig:
                 ),
                 input_device=audio.get("input_device"),
                 output_device=audio.get("output_device"),
+            ),
+            observability=ObservabilityConfig(
+                enabled=observability.get("enabled", False),
+                console=observability.get("console", True),
+                jsonl=observability.get("jsonl", True),
+                log_dir=Path(observability.get("log_dir", "logs")),
             ),
         )
     except KeyError as exc:

@@ -35,3 +35,9 @@ audio:
 
 runtime:
   output_dir: output/wsl
+
+observability:
+  enabled: true
+  console: true
+  jsonl: true
+  log_dir: logs/wsl

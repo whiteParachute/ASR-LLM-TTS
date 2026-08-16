@@ -1,9 +1,12 @@
+import json
+import tempfile
 import unittest
 from pathlib import Path
 from typing import Sequence
 
 from voice_assistant.contracts import Message
 from voice_assistant.pipeline import VoicePipeline
+from voice_assistant.observability import PerformanceLogger
 
 
 class FakeASR:
@@ -89,6 +92,48 @@ class VoicePipelineTest(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             pipeline.run(audio_path=Path("empty.wav"), output_path=Path("answer.mp3"))
+
+    def test_records_asr_llm_and_tts_stage_sequence(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            performance = PerformanceLogger(
+                enabled=True,
+                console=False,
+                jsonl=True,
+                log_dir=Path(temp_dir),
+                session_id="pipeline-session",
+            )
+            pipeline = VoicePipeline(
+                asr=FakeASR(transcript="你好"),
+                llm=FakeLLM(reply="你好呀"),
+                tts=FakeTTS(),
+                system_prompt="测试助手",
+                performance=performance,
+            )
+
+            with performance.turn("turn_0003"):
+                pipeline.run(
+                    audio_path=Path("question.wav"),
+                    output_path=Path("answer.wav"),
+                )
+            performance.close()
+
+            events = [
+                json.loads(line)
+                for line in (Path(temp_dir) / "performance.jsonl")
+                .read_text(encoding="utf-8")
+                .splitlines()
+            ]
+
+        self.assertEqual(
+            [event["stage"] for event in events],
+            ["asr", "llm", "tts"],
+        )
+        self.assertTrue(
+            all(event["turn_id"] == "turn_0003" for event in events)
+        )
+        self.assertTrue(
+            all("transcript" not in event for event in events)
+        )
 
 
 if __name__ == "__main__":

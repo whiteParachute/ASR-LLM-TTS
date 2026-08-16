@@ -69,6 +69,7 @@ class BootstrapTest(unittest.TestCase):
             tts=tts,
             system_prompt=config.llm.system_prompt,
             reply_instructions=config.llm.reply_instruction,
+            performance=None,
         )
         self.assertIs(result, pipeline)
 
