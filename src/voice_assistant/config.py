@@ -53,6 +53,7 @@ class TTSConfig:
     x_vector_only_mode: bool = False
     dtype: str = "bfloat16"
     attention_implementation: str = "sdpa"
+    max_new_tokens: int = 256
     startup_timeout_seconds: float = 180.0
 
 
@@ -185,6 +186,7 @@ def load_config(config_path: Path) -> AppConfig:
                     "attention_implementation",
                     "sdpa",
                 ),
+                max_new_tokens=tts.get("max_new_tokens", 256),
                 startup_timeout_seconds=tts.get(
                     "startup_timeout_seconds",
                     180.0,

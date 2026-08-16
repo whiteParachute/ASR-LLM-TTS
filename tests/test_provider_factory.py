@@ -154,6 +154,7 @@ class ProviderFactoryTest(unittest.TestCase):
             x_vector_only_mode=False,
             dtype="bfloat16",
             attention_implementation="sdpa",
+            max_new_tokens=256,
             startup_timeout_seconds=180.0,
         )
         self.assertIs(provider, mock_qwen3_tts.return_value)

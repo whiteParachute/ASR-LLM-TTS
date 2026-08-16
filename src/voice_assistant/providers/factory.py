@@ -65,6 +65,7 @@ def build_tts(config: TTSConfig) -> TTSProvider:
             x_vector_only_mode=config.x_vector_only_mode,
             dtype=config.dtype,
             attention_implementation=config.attention_implementation,
+            max_new_tokens=config.max_new_tokens,
             startup_timeout_seconds=config.startup_timeout_seconds,
         )
     raise ProviderConfigError(f"Unsupported TTS provider: {config.provider}")

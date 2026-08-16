@@ -110,6 +110,8 @@ class Qwen3TTSWorkerProviderTest(unittest.TestCase):
 
             self.assertTrue(result.is_file())
             self.assertIn("--reference-audio", factory.command or [])
+            self.assertIn("--max-new-tokens", factory.command or [])
+            self.assertIn("256", factory.command or [])
             self.assertEqual(factory.process.returncode, 0)
 
     def test_surfaces_worker_generation_error(self) -> None:
@@ -155,6 +157,20 @@ class Qwen3TTSWorkerProviderTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "cannot be empty"):
                 provider.synthesize("  ", Path(temp_dir) / "answer.wav")
             provider.close()
+
+    def test_rejects_nonpositive_generation_limit(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            reference = Path(temp_dir) / "reference.wav"
+            reference.write_bytes(b"RIFFreference")
+
+            with self.assertRaisesRegex(ValueError, "max_new_tokens"):
+                Qwen3TTSWorkerProvider(
+                    model_name="models/qwen-tts",
+                    reference_audio=reference,
+                    reference_text="参考文本",
+                    max_new_tokens=0,
+                    process_factory=FakeProcessFactory(),
+                )
 
 
 if __name__ == "__main__":

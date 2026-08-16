@@ -46,6 +46,7 @@ class Qwen3TTSWorkerProvider:
         x_vector_only_mode: bool = False,
         dtype: str = "bfloat16",
         attention_implementation: str = "sdpa",
+        max_new_tokens: int = 256,
         startup_timeout_seconds: float = 180.0,
         process_factory: ProcessFactory = subprocess.Popen,
     ) -> None:
@@ -58,6 +59,8 @@ class Qwen3TTSWorkerProvider:
             )
         if startup_timeout_seconds <= 0:
             raise ValueError("Qwen3-TTS startup timeout must be positive")
+        if max_new_tokens <= 0:
+            raise ValueError("Qwen3-TTS max_new_tokens must be positive")
 
         reference_path = reference_audio.expanduser().resolve()
         if not reference_path.is_file():
@@ -80,6 +83,8 @@ class Qwen3TTSWorkerProvider:
             dtype,
             "--attention-implementation",
             attention_implementation,
+            "--max-new-tokens",
+            str(max_new_tokens),
         ]
         if device:
             command.extend(("--device", device))

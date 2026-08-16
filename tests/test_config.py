@@ -48,6 +48,7 @@ class ConfigTest(unittest.TestCase):
         self.assertFalse(config.tts.x_vector_only_mode)
         self.assertEqual(config.tts.dtype, "bfloat16")
         self.assertEqual(config.tts.attention_implementation, "sdpa")
+        self.assertEqual(config.tts.max_new_tokens, 256)
         self.assertEqual(config.audio.sample_rate, 16000)
         self.assertEqual(
             config.audio.playback_backend,

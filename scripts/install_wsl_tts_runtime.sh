@@ -6,6 +6,11 @@ if ! grep -qi microsoft /proc/version 2>/dev/null; then
     exit 1
 fi
 
+if ! command -v sox >/dev/null 2>&1; then
+    sudo apt-get update
+    sudo apt-get install -y sox
+fi
+
 python_version="${PYTHON_VERSION:-3.11}"
 pypi_index_url="${PYPI_INDEX_URL:-https://pypi.org/simple}"
 

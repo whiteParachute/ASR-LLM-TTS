@@ -26,6 +26,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--device", default="cuda:0")
     parser.add_argument("--dtype", default="bfloat16")
     parser.add_argument("--attention-implementation", default="sdpa")
+    parser.add_argument("--max-new-tokens", type=int, default=256)
     parser.add_argument("--x-vector-only-mode", action="store_true")
     return parser
 
@@ -98,6 +99,7 @@ def main() -> int:
                     language=args.language,
                     voice_clone_prompt=voice_prompt,
                     non_streaming_mode=True,
+                    max_new_tokens=args.max_new_tokens,
                 )
                 if not wavs:
                     raise RuntimeError("Qwen3-TTS returned no audio")
