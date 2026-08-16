@@ -46,6 +46,15 @@ class TTSConfig:
     sample_rate: int = 24000
     output_format: str = "wav"
     device: str | None = None
+    worker_python: str = ".venv-tts/bin/python"
+    worker_script: str = "scripts/qwen3_tts_worker.py"
+    reference_audio: Path | None = None
+    reference_text: str = ""
+    x_vector_only_mode: bool = False
+    dtype: str = "bfloat16"
+    attention_implementation: str = "sdpa"
+    max_new_tokens: int = 256
+    startup_timeout_seconds: float = 180.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -154,6 +163,34 @@ def load_config(config_path: Path) -> AppConfig:
                 sample_rate=tts.get("sample_rate", 24000),
                 output_format=tts.get("output_format", "wav"),
                 device=tts.get("device"),
+                worker_python=tts.get(
+                    "worker_python",
+                    ".venv-tts/bin/python",
+                ),
+                worker_script=tts.get(
+                    "worker_script",
+                    "scripts/qwen3_tts_worker.py",
+                ),
+                reference_audio=(
+                    Path(tts["reference_audio"])
+                    if tts.get("reference_audio")
+                    else None
+                ),
+                reference_text=tts.get("reference_text", ""),
+                x_vector_only_mode=tts.get(
+                    "x_vector_only_mode",
+                    False,
+                ),
+                dtype=tts.get("dtype", "bfloat16"),
+                attention_implementation=tts.get(
+                    "attention_implementation",
+                    "sdpa",
+                ),
+                max_new_tokens=tts.get("max_new_tokens", 256),
+                startup_timeout_seconds=tts.get(
+                    "startup_timeout_seconds",
+                    180.0,
+                ),
             ),
             runtime=RuntimeConfig(
                 output_dir=Path(runtime["output_dir"]),

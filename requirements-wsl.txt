@@ -1,4 +1,4 @@
-# Minimal WSL runtime for local SenseVoice + Qwen + Kokoro.
+# Main WSL runtime for SenseVoice + Qwen. Qwen3-TTS has its own environment.
 # Install matching CUDA builds of torch, torchaudio, and torchvision first.
 
 # Configuration and model loading
@@ -19,9 +19,7 @@ modelscope==1.38.1
 librosa==0.10.2.post1
 kaldiio==2.18.0
 
-# Local TTS and audio
-kokoro==0.9.4
-misaki[zh]==0.9.4
+# Audio
 numpy==1.26.3
 soundfile==0.12.1
 sounddevice==0.5.1

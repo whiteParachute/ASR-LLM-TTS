@@ -1,5 +1,6 @@
 from .edge_tts_provider import EdgeTTSProvider
 from .kokoro_tts_provider import KokoroTTSProvider
+from .qwen3_tts_worker import Qwen3TTSWorkerProvider
 from .factory import (
     ProviderConfigError,
     build_asr,
@@ -13,6 +14,7 @@ from .sensevoice_asr import SenseVoiceASR
 __all__ = [
     "EdgeTTSProvider",
     "KokoroTTSProvider",
+    "Qwen3TTSWorkerProvider",
     "ProviderConfigError",
     "Qwen25LLM",
     "Qwen35LLM",

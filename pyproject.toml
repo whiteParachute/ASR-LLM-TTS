@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "local-voice-assistant"
 version = "0.1.0"
-description = "A modular local SenseVoice, Qwen, and Kokoro voice assistant"
+description = "A modular local ASR, Qwen LLM, and Qwen3-TTS voice assistant"
 requires-python = ">=3.11,<3.13"
 
 [project.scripts]

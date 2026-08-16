@@ -86,8 +86,6 @@ packages = (
     "torchaudio",
     "funasr",
     "transformers",
-    "kokoro",
-    "misaki",
     "sounddevice",
     "soundfile",
     "webrtcvad",
@@ -108,4 +106,26 @@ else:
 PY
 else
     printf '.venv does not exist\n'
+fi
+
+section "Qwen3-TTS isolated virtual environment"
+if [[ -x .venv-tts/bin/python ]]; then
+    .venv-tts/bin/python - <<'PY'
+import importlib.util
+
+for package in ("torch", "torchaudio", "transformers", "qwen_tts"):
+    print(f"{package}: {bool(importlib.util.find_spec(package))}")
+
+try:
+    import torch
+    import transformers
+except ImportError:
+    pass
+else:
+    print(f"torch_version: {torch.__version__}")
+    print(f"transformers_version: {transformers.__version__}")
+    print(f"cuda_available: {torch.cuda.is_available()}")
+PY
+else
+    printf '.venv-tts does not exist\n'
 fi
