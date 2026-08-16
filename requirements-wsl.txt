@@ -4,12 +4,14 @@
 # Configuration and model loading
 PyYAML==6.0.2
 PySocks==1.7.1
-accelerate==0.33.0
-transformers==4.45.2
-tokenizers==0.20.1
-safetensors==0.4.5
-huggingface-hub==0.26.1
+accelerate==1.13.0
+transformers==5.13.0
+tokenizers==0.22.2
+safetensors==0.8.0
+huggingface-hub==1.5.0
 sentencepiece==0.2.0
+bitsandbytes==0.50.1
+regex>=2025.10.22
 
 # ASR
 funasr==1.1.12

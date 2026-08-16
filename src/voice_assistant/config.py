@@ -27,6 +27,13 @@ class LLMConfig:
     max_new_tokens: int
     system_prompt: str
     reply_instruction: str = ""
+    load_in_4bit: bool = False
+    compute_dtype: str = "float16"
+    enable_thinking: bool = False
+    do_sample: bool = True
+    temperature: float = 0.7
+    top_p: float = 0.8
+    top_k: int = 20
 
 
 @dataclass(frozen=True, slots=True)
@@ -130,6 +137,13 @@ def load_config(config_path: Path) -> AppConfig:
                 max_new_tokens=llm["max_new_tokens"],
                 system_prompt=llm["system_prompt"],
                 reply_instruction=llm.get("reply_instruction", ""),
+                load_in_4bit=llm.get("load_in_4bit", False),
+                compute_dtype=llm.get("compute_dtype", "float16"),
+                enable_thinking=llm.get("enable_thinking", False),
+                do_sample=llm.get("do_sample", True),
+                temperature=llm.get("temperature", 0.7),
+                top_p=llm.get("top_p", 0.8),
+                top_k=llm.get("top_k", 20),
             ),
             tts=TTSConfig(
                 provider=tts["provider"],

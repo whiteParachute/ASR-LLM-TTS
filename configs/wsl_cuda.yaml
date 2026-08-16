@@ -6,9 +6,16 @@ asr:
   device: cuda:0
 
 llm:
-  provider: qwen25_transformers
-  model: models/Qwen2.5-1.5B-Instruct
+  provider: qwen35_transformers
+  model: models/Qwen3.5-4B
   max_new_tokens: 128
+  load_in_4bit: true
+  compute_dtype: float16
+  enable_thinking: false
+  do_sample: true
+  temperature: 0.7
+  top_p: 0.8
+  top_k: 20
   system_prompt: 你是一个友好的中文语音助手
   reply_instruction: 回答简短一些，保持在50字以内。
 

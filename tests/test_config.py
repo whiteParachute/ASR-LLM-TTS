@@ -17,9 +17,16 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(config.asr.model, "iic/SenseVoiceSmall")
         self.assertEqual(
             config.llm.model,
-            "Qwen/Qwen2.5-1.5B-Instruct",
+            "Qwen/Qwen3.5-4B",
         )
         self.assertEqual(config.llm.max_new_tokens, 128)
+        self.assertTrue(config.llm.load_in_4bit)
+        self.assertEqual(config.llm.compute_dtype, "float16")
+        self.assertFalse(config.llm.enable_thinking)
+        self.assertTrue(config.llm.do_sample)
+        self.assertEqual(config.llm.temperature, 0.7)
+        self.assertEqual(config.llm.top_p, 0.8)
+        self.assertEqual(config.llm.top_k, 20)
         self.assertEqual(config.tts.provider, "kokoro")
         self.assertEqual(config.tts.model, "hexgrad/Kokoro-82M")
         self.assertEqual(config.tts.language_code, "z")
