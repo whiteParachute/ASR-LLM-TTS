@@ -15,7 +15,7 @@ regex>=2025.10.22
 
 # ASR
 funasr==1.1.12
-modelscope==1.15.0
+modelscope==1.38.1
 librosa==0.10.2.post1
 kaldiio==2.18.0
 

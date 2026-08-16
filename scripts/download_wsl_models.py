@@ -4,7 +4,7 @@ import argparse
 from dataclasses import dataclass
 from pathlib import Path
 
-from modelscope.hub.snapshot_download import snapshot_download
+from modelscope import snapshot_download
 
 
 @dataclass(frozen=True)
