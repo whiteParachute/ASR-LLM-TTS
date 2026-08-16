@@ -64,6 +64,7 @@ class TTSConfig:
 @dataclass(frozen=True, slots=True)
 class RuntimeConfig:
     output_dir: Path
+    reply_chunk_max_chars: int = 18
 
 
 @dataclass(frozen=True, slots=True)
@@ -205,6 +206,10 @@ def load_config(config_path: Path) -> AppConfig:
             ),
             runtime=RuntimeConfig(
                 output_dir=Path(runtime["output_dir"]),
+                reply_chunk_max_chars=runtime.get(
+                    "reply_chunk_max_chars",
+                    18,
+                ),
             ),
             audio=AudioConfig(
                 playback_backend=audio.get(

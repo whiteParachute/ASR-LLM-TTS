@@ -247,6 +247,10 @@ def _format_console_event(event: dict[str, Any]) -> str:
         "input_chars",
         "output_chars",
         "text_chars",
+        "reply_chunks",
+        "first_chunk_chars",
+        "chunk_index",
+        "chunk_count",
         "error_type",
     ):
         if key in event:

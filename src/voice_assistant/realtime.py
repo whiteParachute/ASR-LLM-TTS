@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import argparse
 from collections.abc import Callable
+from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import nullcontext
+from contextvars import copy_context
 from pathlib import Path
 from typing import Protocol
 
@@ -16,6 +18,7 @@ from voice_assistant.config import AppConfig, load_config
 from voice_assistant.contracts import (
     AudioPlayer,
     PipelineResult,
+    PreparedResponse,
     UtteranceRecorder,
 )
 from voice_assistant.observability import (
@@ -24,14 +27,25 @@ from voice_assistant.observability import (
     measure_stage,
     wav_duration_ms,
 )
+from voice_assistant.text_chunking import split_reply_text
 
 
 class TurnPipeline(Protocol):
-    def run(self, audio_path: Path, output_path: Path) -> PipelineResult:
+    def prepare(self, audio_path: Path) -> PreparedResponse:
+        ...
+
+    def synthesize(
+        self,
+        text: str,
+        output_path: Path,
+        *,
+        chunk_index: int = 1,
+        chunk_count: int = 1,
+    ) -> Path:
         ...
 
 
-ResultObserver = Callable[[PipelineResult], None]
+ResultObserver = Callable[[PreparedResponse], None]
 
 
 class RealtimeVoiceAssistant:
@@ -44,14 +58,18 @@ class RealtimeVoiceAssistant:
         player: AudioPlayer,
         output_dir: Path,
         output_format: str = "wav",
+        reply_chunk_max_chars: int = 18,
         result_observer: ResultObserver | None = None,
         performance: PerformanceLogger | None = None,
     ) -> None:
+        if reply_chunk_max_chars < 1:
+            raise ValueError("reply_chunk_max_chars must be at least 1.")
         self._pipeline = pipeline
         self._recorder = recorder
         self._player = player
         self._output_dir = output_dir
         self._output_format = output_format.lstrip(".")
+        self._reply_chunk_max_chars = reply_chunk_max_chars
         self._result_observer = result_observer
         self._performance = performance
         self._turn_number = 0
@@ -91,25 +109,93 @@ class RealtimeVoiceAssistant:
                 self._performance,
                 "turn_total",
                 audio_duration_ms=input_audio_duration,
-            ):
+            ) as turn_span:
                 with measure_stage(
                     self._performance,
-                    "response_prepare",
-                ):
-                    result = self._pipeline.run(
-                        audio_path=recorded_path,
-                        output_path=reply_path,
+                    "time_to_first_audio",
+                ) as first_audio_span:
+                    with measure_stage(
+                        self._performance,
+                        "response_prepare",
+                    ):
+                        prepared = self._pipeline.prepare(recorded_path)
+
+                    chunks = split_reply_text(
+                        prepared.reply,
+                        max_chars=self._reply_chunk_max_chars,
+                    )
+                    if not chunks:
+                        raise ValueError("LLM returned an empty reply.")
+                    chunk_paths = _build_chunk_paths(reply_path, len(chunks))
+
+                    if self._result_observer is not None:
+                        self._result_observer(prepared)
+
+                    first_path = self._pipeline.synthesize(
+                        chunks[0],
+                        chunk_paths[0],
+                        chunk_index=1,
+                        chunk_count=len(chunks),
+                    )
+                    first_audio_span.add_fields(
+                        reply_chunks=len(chunks),
+                        first_chunk_chars=len(chunks[0]),
+                        audio_duration_ms=wav_duration_ms(first_path),
                     )
 
-                if self._result_observer is not None:
-                    self._result_observer(result)
+                generated_paths = self._play_with_prefetch(
+                    chunks=chunks,
+                    chunk_paths=chunk_paths,
+                    first_path=first_path,
+                )
+                turn_span.add_fields(reply_chunks=len(chunks))
+                return PipelineResult(
+                    transcript=prepared.transcript,
+                    reply=prepared.reply,
+                    audio_path=generated_paths[0],
+                    audio_paths=tuple(generated_paths),
+                )
+
+    def _play_with_prefetch(
+        self,
+        *,
+        chunks: list[str],
+        chunk_paths: list[Path],
+        first_path: Path,
+    ) -> list[Path]:
+        generated_paths = [first_path]
+        current_path = first_path
+
+        with ThreadPoolExecutor(
+            max_workers=1,
+            thread_name_prefix="tts-prefetch",
+        ) as executor:
+            for index in range(len(chunks)):
+                next_audio: Future[Path] | None = None
+                if index + 1 < len(chunks):
+                    next_audio = _submit_synthesis(
+                        executor=executor,
+                        pipeline=self._pipeline,
+                        text=chunks[index + 1],
+                        output_path=chunk_paths[index + 1],
+                        chunk_index=index + 2,
+                        chunk_count=len(chunks),
+                    )
+
                 with measure_stage(
                     self._performance,
                     "playback",
-                    audio_duration_ms=wav_duration_ms(result.audio_path),
+                    audio_duration_ms=wav_duration_ms(current_path),
+                    chunk_index=index + 1,
+                    chunk_count=len(chunks),
                 ):
-                    self._player.play(result.audio_path)
-                return result
+                    self._player.play(current_path)
+
+                if next_audio is not None:
+                    current_path = next_audio.result()
+                    generated_paths.append(current_path)
+
+        return generated_paths
 
     def run_forever(self) -> None:
         while True:
@@ -122,8 +208,13 @@ class RealtimeVoiceAssistant:
                 continue
 
     def close(self) -> None:
-        if self._performance is not None:
-            self._performance.close()
+        try:
+            close = getattr(self._pipeline, "close", None)
+            if callable(close):
+                close()
+        finally:
+            if self._performance is not None:
+                self._performance.close()
 
 
 def build_realtime_assistant(config: AppConfig) -> RealtimeVoiceAssistant:
@@ -165,14 +256,47 @@ def build_realtime_assistant(config: AppConfig) -> RealtimeVoiceAssistant:
         player=player,
         output_dir=config.runtime.output_dir / "turns",
         output_format=config.tts.output_format,
+        reply_chunk_max_chars=config.runtime.reply_chunk_max_chars,
         result_observer=_print_result,
         performance=performance,
     )
 
 
-def _print_result(result: PipelineResult) -> None:
+def _print_result(result: PreparedResponse) -> None:
     print(f"识别文本：{result.transcript}")
     print(f"模型回复：{result.reply}")
+
+
+def _build_chunk_paths(reply_path: Path, chunk_count: int) -> list[Path]:
+    if chunk_count == 1:
+        return [reply_path]
+    return [
+        reply_path.with_name(
+            f"{reply_path.stem}_{index:03d}{reply_path.suffix}"
+        )
+        for index in range(1, chunk_count + 1)
+    ]
+
+
+def _submit_synthesis(
+    *,
+    executor: ThreadPoolExecutor,
+    pipeline: TurnPipeline,
+    text: str,
+    output_path: Path,
+    chunk_index: int,
+    chunk_count: int,
+) -> Future[Path]:
+    context = copy_context()
+    return executor.submit(
+        context.run,
+        lambda: pipeline.synthesize(
+            text,
+            output_path,
+            chunk_index=chunk_index,
+            chunk_count=chunk_count,
+        ),
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:

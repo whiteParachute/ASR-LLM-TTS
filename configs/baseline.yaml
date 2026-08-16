@@ -19,7 +19,7 @@ llm:
   top_p: 0.8
   top_k: 20
   system_prompt: 你是一个友好的中文语音助手
-  reply_instruction: 回答简短一些，保持在50字以内。
+  reply_instruction: 用自然口语直接回答，尽量不超过35个汉字；不要复述问题。
 
 tts:
   provider: qwen3_tts_worker
@@ -53,6 +53,7 @@ audio:
 
 runtime:
   output_dir: output
+  reply_chunk_max_chars: 18
 
 observability:
   enabled: true

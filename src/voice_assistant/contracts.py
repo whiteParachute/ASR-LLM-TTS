@@ -17,6 +17,17 @@ class PipelineResult:
     transcript: str
     reply: str
     audio_path: Path
+    audio_paths: tuple[Path, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not self.audio_paths:
+            object.__setattr__(self, "audio_paths", (self.audio_path,))
+
+
+@dataclass(frozen=True, slots=True)
+class PreparedResponse:
+    transcript: str
+    reply: str
 
 
 class ASRProvider(Protocol):

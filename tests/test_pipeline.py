@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from typing import Sequence
 
-from voice_assistant.contracts import Message
+from voice_assistant.contracts import Message, PipelineResult
 from voice_assistant.pipeline import VoicePipeline
 from voice_assistant.observability import PerformanceLogger
 
@@ -41,6 +41,17 @@ class FakeTTS:
 
 
 class VoicePipelineTest(unittest.TestCase):
+    def test_pipeline_result_defaults_to_primary_audio_path(self) -> None:
+        audio_path = Path("answer.wav")
+
+        result = PipelineResult(
+            transcript="问题",
+            reply="回答",
+            audio_path=audio_path,
+        )
+
+        self.assertEqual(result.audio_paths, (audio_path,))
+
     def test_runs_asr_llm_tts_in_order(self) -> None:
         # Arrange
         expected_transcript = "今天天气怎么样？"
@@ -68,6 +79,7 @@ class VoicePipelineTest(unittest.TestCase):
         self.assertEqual(result.transcript, expected_transcript)
         self.assertEqual(result.reply, expected_reply)
         self.assertEqual(result.audio_path, expected_path)
+        self.assertEqual(result.audio_paths, (expected_path,))
 
         self.assertEqual(asr.received_path, Path("question.wav"))
         self.assertEqual(tts.received_text, expected_reply)
@@ -80,6 +92,21 @@ class VoicePipelineTest(unittest.TestCase):
                 Message(role="user", content="今天天气怎么样？\n\n回答保持在50字以内。"),
             ],
         )
+
+    def test_can_prepare_text_before_synthesizing_audio(self) -> None:
+        tts = FakeTTS()
+        pipeline = VoicePipeline(
+            asr=FakeASR(transcript="问题"),
+            llm=FakeLLM(reply="先得到文字，再生成语音。"),
+            tts=tts,
+            system_prompt="测试助手",
+        )
+
+        prepared = pipeline.prepare(Path("question.wav"))
+
+        self.assertEqual(prepared.transcript, "问题")
+        self.assertEqual(prepared.reply, "先得到文字，再生成语音。")
+        self.assertEqual(tts.received_text, "")
 
     def test_stops_when_asr_returns_empty_text(self) -> None:
         # Arrange

@@ -67,6 +67,13 @@ after 800 ms of silence, processes the turn, plays the reply through
 WSLg PulseAudio, and then listens for the next turn. Press `Ctrl+C` to
 stop.
 
+Realtime replies are split at natural punctuation with a configurable
+maximum chunk size. The first chunk is synthesized immediately; while
+it is playing, the persistent TTS worker synthesizes the next chunk.
+This is application-level pipelining because the current open-source
+Qwen3-TTS inference API returns a complete waveform for each request.
+Tune the limit with `runtime.reply_chunk_max_chars`.
+
 Run the test suite with:
 
 ```bash
@@ -81,9 +88,10 @@ model weights under `models/`; both are ignored by Git.
 ## Performance observability v1
 
 Each conversation turn now prints privacy-safe stage timings for
-recording, ASR, LLM generation, TTS, reply preparation, playback, and
-the full post-recording turn. Model loading is measured separately so
-cold-start time is not mixed into steady-state conversation latency.
+recording, ASR, LLM generation, each TTS and playback chunk, reply
+preparation, time to first audio, and the full post-recording turn.
+Model loading is measured separately so cold-start time is not mixed
+into steady-state conversation latency.
 
 The WSL profile appends structured events to:
 
