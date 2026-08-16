@@ -9,6 +9,7 @@ fi
 python_version="${PYTHON_VERSION:-3.11}"
 torch_version="${TORCH_VERSION:-2.11.0}"
 torchvision_version="${TORCHVISION_VERSION:-0.26.0}"
+torch_build_suffix="${TORCH_BUILD_SUFFIX:-cu128}"
 pytorch_index_url="${PYTORCH_INDEX_URL:-https://download.pytorch.org/whl/cu128}"
 pypi_index_url="${PYPI_INDEX_URL:-https://pypi.org/simple}"
 uv_version="${UV_VERSION:-0.11.32}"
@@ -88,11 +89,12 @@ fi
     --upgrade pip setuptools wheel \
     --index-url "$pypi_index_url"
 "$uv_bin" pip install --python .venv/bin/python \
-    "torch==${torch_version}" \
-    "torchaudio==${torch_version}" \
-    "torchvision==${torchvision_version}" \
-    --find-links "$pytorch_index_url" \
-    --index-url "$pypi_index_url"
+    "torch==${torch_version}+${torch_build_suffix}" \
+    "torchaudio==${torch_version}+${torch_build_suffix}" \
+    "torchvision==${torchvision_version}+${torch_build_suffix}" \
+    --index-url "$pytorch_index_url" \
+    --extra-index-url "$pypi_index_url" \
+    --index-strategy unsafe-best-match
 "$uv_bin" pip install --python .venv/bin/python \
     --requirement requirements-wsl.txt \
     --index-url "$pypi_index_url"
