@@ -4,7 +4,7 @@ The current modular runtime is a fully local, half-duplex voice loop:
 
 ```text
 Windows microphone -> WebRTC VAD -> SenseVoiceSmall
-                   -> Qwen2.5-1.5B-Instruct
+                   -> Qwen3.5-4B (NF4 4-bit, non-thinking)
                    -> Kokoro-82M -> Windows speakers
 ```
 
@@ -34,7 +34,7 @@ The WSL configuration expects these local directories:
 
 ```text
 models/SenseVoiceSmall
-models/Qwen2.5-1.5B-Instruct
+models/Qwen3.5-4B
 models/Kokoro-82M
 ```
 

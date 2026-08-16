@@ -54,6 +54,37 @@ class ProviderFactoryTest(unittest.TestCase):
 
         self.assertIs(provider, mock_qwen25_llm.return_value)
 
+    @patch("voice_assistant.providers.factory.Qwen35LLM")
+    def test_builds_qwen35_llm(self, mock_qwen35_llm) -> None:
+        config = LLMConfig(
+            provider="qwen35_transformers",
+            model="Qwen/Qwen3.5-4B",
+            max_new_tokens=128,
+            system_prompt="你是一个语音助手。",
+            load_in_4bit=True,
+            compute_dtype="float16",
+            enable_thinking=False,
+            do_sample=True,
+            temperature=0.7,
+            top_p=0.8,
+            top_k=20,
+        )
+
+        provider = build_llm(config)
+
+        mock_qwen35_llm.assert_called_once_with(
+            model_name="Qwen/Qwen3.5-4B",
+            max_new_tokens=128,
+            load_in_4bit=True,
+            compute_dtype="float16",
+            enable_thinking=False,
+            do_sample=True,
+            temperature=0.7,
+            top_p=0.8,
+            top_k=20,
+        )
+        self.assertIs(provider, mock_qwen35_llm.return_value)
+
     def test_reject_unknown_llm_provider(self) -> None:
         config = LLMConfig(
             provider="unknown_provider",

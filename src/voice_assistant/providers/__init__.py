@@ -7,6 +7,7 @@ from .factory import (
     build_tts,
 )
 from .qwen25_llm import Qwen25LLM
+from .qwen35_llm import Qwen35LLM
 from .sensevoice_asr import SenseVoiceASR
 
 __all__ = [
@@ -14,6 +15,7 @@ __all__ = [
     "KokoroTTSProvider",
     "ProviderConfigError",
     "Qwen25LLM",
+    "Qwen35LLM",
     "SenseVoiceASR",
     "build_asr",
     "build_llm",

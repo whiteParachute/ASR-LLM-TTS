@@ -5,6 +5,7 @@ from voice_assistant.contracts import ASRProvider, LLMProvider, TTSProvider
 from voice_assistant.providers.edge_tts_provider import EdgeTTSProvider
 from voice_assistant.providers.kokoro_tts_provider import KokoroTTSProvider
 from voice_assistant.providers.qwen25_llm import Qwen25LLM
+from voice_assistant.providers.qwen35_llm import Qwen35LLM
 from voice_assistant.providers.sensevoice_asr import SenseVoiceASR
 
 
@@ -25,6 +26,18 @@ def build_asr(config: ASRConfig) -> ASRProvider:
 def build_llm(config: LLMConfig) -> LLMProvider:
     if config.provider == "qwen25_transformers":
         return Qwen25LLM(model_name=config.model, max_new_tokens=config.max_new_tokens)
+    if config.provider == "qwen35_transformers":
+        return Qwen35LLM(
+            model_name=config.model,
+            max_new_tokens=config.max_new_tokens,
+            load_in_4bit=config.load_in_4bit,
+            compute_dtype=config.compute_dtype,
+            enable_thinking=config.enable_thinking,
+            do_sample=config.do_sample,
+            temperature=config.temperature,
+            top_p=config.top_p,
+            top_k=config.top_k,
+        )
     raise ProviderConfigError(f"Unsupported LLM provider: {config.provider}")
 
 def build_tts(config: TTSConfig) -> TTSProvider:

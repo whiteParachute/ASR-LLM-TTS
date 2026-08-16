@@ -4,7 +4,7 @@ import argparse
 from dataclasses import dataclass
 from pathlib import Path
 
-from modelscope.hub.snapshot_download import snapshot_download
+from modelscope import snapshot_download
 
 
 @dataclass(frozen=True)
@@ -37,16 +37,20 @@ DOWNLOADS = {
         ),
     ),
     "qwen": ModelDownload(
-        repo_id="Qwen/Qwen2.5-1.5B-Instruct",
-        local_dir=Path("models/Qwen2.5-1.5B-Instruct"),
+        repo_id="Qwen/Qwen3.5-4B",
+        local_dir=Path("models/Qwen3.5-4B"),
         files=(
+            "chat_template.jinja",
             "config.json",
-            "configuration.json",
             "generation_config.json",
             "merges.txt",
-            "model.safetensors",
+            "model.safetensors-00001-of-00002.safetensors",
+            "model.safetensors-00002-of-00002.safetensors",
+            "model.safetensors.index.json",
+            "preprocessor_config.json",
             "tokenizer.json",
             "tokenizer_config.json",
+            "video_preprocessor_config.json",
             "vocab.json",
         ),
     ),
