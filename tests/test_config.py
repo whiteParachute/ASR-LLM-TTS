@@ -13,8 +13,13 @@ class ConfigTest(unittest.TestCase):
             PROJECT_ROOT / "configs" / "baseline.yaml"
         )
 
-        self.assertEqual(config.asr.provider, "sensevoice")
-        self.assertEqual(config.asr.model, "iic/SenseVoiceSmall")
+        self.assertEqual(config.asr.provider, "qwen3_asr_transformers")
+        self.assertEqual(config.asr.model, "Qwen/Qwen3-ASR-0.6B-hf")
+        self.assertEqual(config.asr.language, "auto")
+        self.assertEqual(config.asr.compute_dtype, "bfloat16")
+        self.assertEqual(config.asr.attention_implementation, "sdpa")
+        self.assertEqual(config.asr.max_new_tokens, 256)
+        self.assertEqual(config.asr.prompt, "")
         self.assertEqual(
             config.llm.model,
             "Qwen/Qwen3.5-4B",

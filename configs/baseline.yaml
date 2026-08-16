@@ -1,8 +1,11 @@
 asr:
-  provider: sensevoice
-  model: iic/SenseVoiceSmall
+  provider: qwen3_asr_transformers
+  model: Qwen/Qwen3-ASR-0.6B-hf
   language: auto
-  use_itn: false
+  compute_dtype: bfloat16
+  attention_implementation: sdpa
+  max_new_tokens: 256
+  prompt: ""
 
 llm:
   provider: qwen35_transformers

@@ -5,6 +5,7 @@ from voice_assistant.contracts import ASRProvider, LLMProvider, TTSProvider
 from voice_assistant.providers.edge_tts_provider import EdgeTTSProvider
 from voice_assistant.providers.kokoro_tts_provider import KokoroTTSProvider
 from voice_assistant.providers.qwen3_tts_worker import Qwen3TTSWorkerProvider
+from voice_assistant.providers.qwen3_asr import Qwen3ASR
 from voice_assistant.providers.qwen25_llm import Qwen25LLM
 from voice_assistant.providers.qwen35_llm import Qwen35LLM
 from voice_assistant.providers.sensevoice_asr import SenseVoiceASR
@@ -21,6 +22,16 @@ def build_asr(config: ASRConfig) -> ASRProvider:
             language=config.language,
             use_itn=config.use_itn,
             device=config.device,
+        )
+    if config.provider == "qwen3_asr_transformers":
+        return Qwen3ASR(
+            model_name=config.model,
+            language=config.language,
+            device=config.device,
+            compute_dtype=config.compute_dtype,
+            attention_implementation=config.attention_implementation,
+            max_new_tokens=config.max_new_tokens,
+            prompt=config.prompt,
         )
     raise ProviderConfigError(f"Unsupported ASR provider: {config.provider}")
 

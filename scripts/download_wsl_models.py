@@ -36,6 +36,19 @@ DOWNLOADS = {
             "tokens.json",
         ),
     ),
+    "qwen_asr_hf": ModelDownload(
+        repo_id="Qwen/Qwen3-ASR-0.6B-hf",
+        local_dir=Path("models/Qwen3-ASR-0.6B-hf"),
+        files=(
+            "chat_template.jinja",
+            "config.json",
+            "generation_config.json",
+            "model.safetensors",
+            "processor_config.json",
+            "tokenizer.json",
+            "tokenizer_config.json",
+        ),
+    ),
     "qwen": ModelDownload(
         repo_id="Qwen/Qwen3.5-4B",
         local_dir=Path("models/Qwen3.5-4B"),
@@ -73,7 +86,7 @@ DOWNLOADS = {
     ),
 }
 
-DEFAULT_DOWNLOADS = ("sensevoice", "qwen", "qwen_tts")
+DEFAULT_DOWNLOADS = ("qwen_asr_hf", "qwen", "qwen_tts")
 
 
 def build_parser() -> argparse.ArgumentParser:

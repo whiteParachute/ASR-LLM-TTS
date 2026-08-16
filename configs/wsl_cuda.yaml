@@ -1,9 +1,12 @@
 asr:
-  provider: sensevoice
-  model: models/SenseVoiceSmall
+  provider: qwen3_asr_transformers
+  model: models/Qwen3-ASR-0.6B-hf
   language: auto
-  use_itn: false
   device: cuda:0
+  compute_dtype: bfloat16
+  attention_implementation: sdpa
+  max_new_tokens: 256
+  prompt: ""
 
 llm:
   provider: qwen35_transformers

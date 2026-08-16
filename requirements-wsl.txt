@@ -1,4 +1,4 @@
-# Main WSL runtime for SenseVoice + Qwen. Qwen3-TTS has its own environment.
+# Main WSL runtime for Qwen3-ASR + Qwen3.5. Qwen3-TTS is isolated.
 # Install matching CUDA builds of torch, torchaudio, and torchvision first.
 
 # Configuration and model loading
@@ -13,11 +13,9 @@ sentencepiece==0.2.0
 bitsandbytes==0.50.1
 regex>=2025.10.22
 
-# ASR
-funasr==1.1.12
+# Model downloads and native ASR audio preprocessing
 modelscope==1.38.1
 librosa==0.10.2.post1
-kaldiio==2.18.0
 
 # Audio
 numpy==1.26.3

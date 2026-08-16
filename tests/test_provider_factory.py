@@ -36,6 +36,32 @@ class ProviderFactoryTest(unittest.TestCase):
         with self.assertRaisesRegex(ProviderConfigError, "Unsupported ASR provider: unknown"):
             build_asr(config)
 
+    @patch("voice_assistant.providers.factory.Qwen3ASR")
+    def test_builds_qwen3_asr_provider(self, mock_qwen3_asr) -> None:
+        config = ASRConfig(
+            provider="qwen3_asr_transformers",
+            model="models/Qwen3-ASR-0.6B-hf",
+            language="auto",
+            device="cuda:0",
+            compute_dtype="bfloat16",
+            attention_implementation="sdpa",
+            max_new_tokens=256,
+            prompt="Vocabulary: Qwen3-ASR.",
+        )
+
+        provider = build_asr(config)
+
+        mock_qwen3_asr.assert_called_once_with(
+            model_name="models/Qwen3-ASR-0.6B-hf",
+            language="auto",
+            device="cuda:0",
+            compute_dtype="bfloat16",
+            attention_implementation="sdpa",
+            max_new_tokens=256,
+            prompt="Vocabulary: Qwen3-ASR.",
+        )
+        self.assertIs(provider, mock_qwen3_asr.return_value)
+
     @patch("voice_assistant.providers.factory.Qwen25LLM")
     def test_builds_qwen25_llm(self, mock_qwen25_llm) -> None:
         config = LLMConfig(

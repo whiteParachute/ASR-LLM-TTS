@@ -18,6 +18,10 @@ class ASRConfig:
     language: str = "auto"
     use_itn: bool = False
     device: str | None = None
+    compute_dtype: str = "bfloat16"
+    attention_implementation: str = "sdpa"
+    max_new_tokens: int = 256
+    prompt: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -139,6 +143,13 @@ def load_config(config_path: Path) -> AppConfig:
                 language=asr.get("language", "auto"),
                 use_itn=asr.get("use_itn", False),
                 device=asr.get("device"),
+                compute_dtype=asr.get("compute_dtype", "bfloat16"),
+                attention_implementation=asr.get(
+                    "attention_implementation",
+                    "sdpa",
+                ),
+                max_new_tokens=asr.get("max_new_tokens", 256),
+                prompt=asr.get("prompt", ""),
             ),
             llm=LLMConfig(
                 provider=llm["provider"],
