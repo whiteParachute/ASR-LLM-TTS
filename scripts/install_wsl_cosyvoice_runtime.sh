@@ -55,6 +55,17 @@ git -C "$runtime_dir" submodule update --init --recursive
     --index-url "$pytorch_index_url" \
     --extra-index-url "$pypi_index_url" \
     --index-strategy unsafe-best-match
+# openai-whisper 20231117 imports pkg_resources from setup.py without
+# declaring setuptools as a build dependency.  Seed a compatible build
+# toolchain and build that package outside uv's isolated environment first.
+"$uv_bin" pip install --python .venv-cosyvoice/bin/python \
+    "setuptools==75.8.0" \
+    wheel \
+    --index-url "$pypi_index_url"
+"$uv_bin" pip install --python .venv-cosyvoice/bin/python \
+    "openai-whisper==20231117" \
+    --no-build-isolation \
+    --index-url "$pypi_index_url"
 "$uv_bin" pip install --python .venv-cosyvoice/bin/python \
     --requirement requirements-wsl-cosyvoice.txt \
     --index-url "$pypi_index_url"
