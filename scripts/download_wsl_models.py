@@ -87,7 +87,24 @@ DOWNLOADS = {
     "cosyvoice3": ModelDownload(
         repo_id="FunAudioLLM/Fun-CosyVoice3-0.5B-2512",
         local_dir=Path("models/Fun-CosyVoice3-0.5B-2512"),
-        files=(),
+        # Standard PyTorch streaming inference does not use the RL LLM,
+        # batch speech tokenizer, or optional TensorRT/ONNX flow decoder.
+        files=(
+            "CosyVoice-BlankEN/config.json",
+            "CosyVoice-BlankEN/generation_config.json",
+            "CosyVoice-BlankEN/merges.txt",
+            "CosyVoice-BlankEN/model.safetensors",
+            "CosyVoice-BlankEN/tokenizer_config.json",
+            "CosyVoice-BlankEN/vocab.json",
+            "campplus.onnx",
+            "config.json",
+            "configuration.json",
+            "cosyvoice3.yaml",
+            "flow.pt",
+            "hift.pt",
+            "llm.pt",
+            "speech_tokenizer_v3.onnx",
+        ),
     ),
 }
 
