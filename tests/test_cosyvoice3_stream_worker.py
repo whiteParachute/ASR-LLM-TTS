@@ -1,4 +1,6 @@
 import base64
+import contextlib
+import importlib.util
 import io
 import json
 import tempfile
@@ -10,6 +12,22 @@ from unittest.mock import Mock
 from voice_assistant.providers.cosyvoice3_stream_worker import (
     CosyVoice3StreamingWorkerProvider,
 )
+
+
+def load_worker_script():
+    script_path = (
+        Path(__file__).resolve().parents[1]
+        / "scripts/cosyvoice3_stream_worker.py"
+    )
+    spec = importlib.util.spec_from_file_location(
+        "cosyvoice3_stream_worker_script",
+        script_path,
+    )
+    if spec is None or spec.loader is None:
+        raise RuntimeError("Unable to load the CosyVoice3 worker script")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 class FakeWorkerProcess:
@@ -53,6 +71,23 @@ def audio_message(request_id: int, pcm: bytes) -> dict:
 
 
 class CosyVoice3StreamingWorkerProviderTest(unittest.TestCase):
+    def test_model_logs_do_not_capture_protocol_stdout(self) -> None:
+        worker = load_worker_script()
+        protocol_output = io.StringIO()
+        model_logs = io.StringIO()
+
+        def noisy_outputs():
+            print("model log")
+            yield {"tts_speech": "audio"}
+
+        with contextlib.redirect_stdout(protocol_output):
+            with contextlib.redirect_stderr(model_logs):
+                for output in worker.iter_model_outputs(noisy_outputs()):
+                    print(f"protocol:{output['tts_speech']}")
+
+        self.assertEqual(protocol_output.getvalue(), "protocol:audio\n")
+        self.assertEqual(model_logs.getvalue(), "model log\n")
+
     def test_streams_chunks_and_writes_complete_wav(self) -> None:
         messages = [
             {"event": "ready", "sample_rate": 24000},

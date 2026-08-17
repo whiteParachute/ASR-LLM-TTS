@@ -7,6 +7,7 @@ import contextlib
 import json
 import sys
 import traceback
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Any
 
@@ -34,6 +35,18 @@ def build_prompt_text(reference_text: str) -> str:
     if "<|endofprompt|>" in cleaned_text:
         return cleaned_text
     return f"You are a helpful assistant.<|endofprompt|>{cleaned_text}"
+
+
+def iter_model_outputs(outputs: Iterable[Any]) -> Iterator[Any]:
+    """Move model console output to stderr without redirecting protocol I/O."""
+    iterator = iter(outputs)
+    while True:
+        with contextlib.redirect_stdout(sys.stderr):
+            try:
+                output = next(iterator)
+            except StopIteration:
+                return
+        yield output
 
 
 def main() -> int:
@@ -118,33 +131,33 @@ def main() -> int:
                         zero_shot_spk_id=voice_id,
                         stream=True,
                     )
-                    for output in outputs:
-                        speech = output["tts_speech"]
-                        speech = speech.detach().float().cpu().flatten()
-                        speech = speech.clamp(-1.0, 1.0)
-                        pcm = (
-                            (speech * 32767.0)
-                            .round()
-                            .to(torch.int16)
-                            .numpy()
-                            .tobytes()
-                        )
-                        if not pcm:
-                            continue
-                        chunk_count += 1
-                        sample_count += len(pcm) // 2
-                        send(
-                            {
-                                "id": request_id,
-                                "event": "audio_chunk",
-                                "chunk_index": chunk_count,
-                                "sample_rate": int(model.sample_rate),
-                                "channels": 1,
-                                "pcm_s16le_base64": base64.b64encode(
-                                    pcm
-                                ).decode("ascii"),
-                            }
-                        )
+                for output in iter_model_outputs(outputs):
+                    speech = output["tts_speech"]
+                    speech = speech.detach().float().cpu().flatten()
+                    speech = speech.clamp(-1.0, 1.0)
+                    pcm = (
+                        (speech * 32767.0)
+                        .round()
+                        .to(torch.int16)
+                        .numpy()
+                        .tobytes()
+                    )
+                    if not pcm:
+                        continue
+                    chunk_count += 1
+                    sample_count += len(pcm) // 2
+                    send(
+                        {
+                            "id": request_id,
+                            "event": "audio_chunk",
+                            "chunk_index": chunk_count,
+                            "sample_rate": int(model.sample_rate),
+                            "channels": 1,
+                            "pcm_s16le_base64": base64.b64encode(pcm).decode(
+                                "ascii"
+                            ),
+                        }
+                    )
 
                 if chunk_count == 0:
                     raise RuntimeError("CosyVoice3 returned no audio")
