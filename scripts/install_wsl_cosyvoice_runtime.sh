@@ -9,6 +9,7 @@ fi
 python_version="${PYTHON_VERSION:-3.11}"
 pypi_index_url="${PYPI_INDEX_URL:-https://pypi.org/simple}"
 pytorch_index_url="${PYTORCH_INDEX_URL:-https://download.pytorch.org/whl/cu121}"
+onnxruntime_index_url="${ONNXRUNTIME_INDEX_URL:-https://aiinfra.pkgs.visualstudio.com/PublicPackages/_packaging/onnxruntime-cuda-12/pypi/simple/}"
 cosyvoice_commit="${COSYVOICE_COMMIT:-074ca6dc9e80a2f424f1f74b48bdd7d3fea531cc}"
 runtime_dir="${COSYVOICE_RUNTIME_DIR:-.runtime/CosyVoice}"
 
@@ -69,8 +70,22 @@ git -C "$runtime_dir" submodule update --init --recursive
 "$uv_bin" pip install --python .venv-cosyvoice/bin/python \
     --requirement requirements-wsl-cosyvoice.txt \
     --index-url "$pypi_index_url"
+# The PyPI 1.18.0 wheel expects CUDA 11.  Replace it with Microsoft's
+# CUDA 12 build after the rest of the dependency graph is installed.
+"$uv_bin" pip install --python .venv-cosyvoice/bin/python \
+    "onnxruntime-gpu==1.18.0" \
+    --reinstall \
+    --no-deps \
+    --index-url "$onnxruntime_index_url"
+
+.venv-cosyvoice/bin/python - <<'PY'
+from modelscope import snapshot_download
+
+print(f"wetext_cache={snapshot_download('pengzhendong/wetext')}")
+PY
 
 .venv-cosyvoice/bin/python - "$runtime_dir" <<'PY'
+import ctypes
 import sys
 from pathlib import Path
 
@@ -78,13 +93,19 @@ runtime_dir = Path(sys.argv[1]).resolve()
 sys.path.insert(0, str(runtime_dir / "third_party/Matcha-TTS"))
 sys.path.insert(0, str(runtime_dir))
 
-import onnxruntime
 import torch
+import onnxruntime
 import transformers
 from cosyvoice.cli.cosyvoice import AutoModel
 
 if not torch.cuda.is_available():
     raise SystemExit("CosyVoice3 environment cannot access CUDA inside WSL")
+
+provider_library = (
+    Path(onnxruntime.__file__).resolve().parent
+    / "capi/libonnxruntime_providers_cuda.so"
+)
+ctypes.CDLL(str(provider_library))
 
 print(f"python={sys.version.split()[0]}")
 print(f"torch={torch.__version__}")

@@ -49,6 +49,26 @@ def iter_model_outputs(outputs: Iterable[Any]) -> Iterator[Any]:
         yield output
 
 
+def prefer_cached_modelscope_download(modelscope_module: Any) -> None:
+    """Use a complete local ModelScope snapshot before making API calls."""
+    snapshot_download = modelscope_module.snapshot_download
+
+    def cached_first(repo_id: str, *args: Any, **kwargs: Any) -> Any:
+        if "local_files_only" in kwargs:
+            return snapshot_download(repo_id, *args, **kwargs)
+        try:
+            return snapshot_download(
+                repo_id,
+                *args,
+                local_files_only=True,
+                **kwargs,
+            )
+        except Exception:
+            return snapshot_download(repo_id, *args, **kwargs)
+
+    modelscope_module.snapshot_download = cached_first
+
+
 def main() -> int:
     args = build_parser().parse_args()
     runtime_dir = args.runtime_dir.expanduser().resolve()
@@ -58,8 +78,11 @@ def main() -> int:
 
     try:
         with contextlib.redirect_stdout(sys.stderr):
+            import modelscope
             import torch
             from cosyvoice.cli.cosyvoice import AutoModel
+
+            prefer_cached_modelscope_download(modelscope)
 
             model = AutoModel(
                 model_dir=args.model,

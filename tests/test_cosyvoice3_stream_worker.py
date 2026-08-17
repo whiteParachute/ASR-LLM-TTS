@@ -7,6 +7,7 @@ import tempfile
 import unittest
 import wave
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock
 
 from voice_assistant.providers.cosyvoice3_stream_worker import (
@@ -71,6 +72,35 @@ def audio_message(request_id: int, pcm: bytes) -> dict:
 
 
 class CosyVoice3StreamingWorkerProviderTest(unittest.TestCase):
+    def test_modelscope_download_prefers_complete_local_snapshot(self) -> None:
+        worker = load_worker_script()
+        download = Mock(return_value="cached-model")
+        modelscope = SimpleNamespace(snapshot_download=download)
+        worker.prefer_cached_modelscope_download(modelscope)
+
+        result = modelscope.snapshot_download("pengzhendong/wetext")
+
+        self.assertEqual(result, "cached-model")
+        download.assert_called_once_with(
+            "pengzhendong/wetext",
+            local_files_only=True,
+        )
+
+    def test_modelscope_download_falls_back_to_network(self) -> None:
+        worker = load_worker_script()
+        download = Mock(
+            side_effect=[RuntimeError("cache missing"), "downloaded-model"]
+        )
+        modelscope = SimpleNamespace(snapshot_download=download)
+        worker.prefer_cached_modelscope_download(modelscope)
+
+        result = modelscope.snapshot_download("pengzhendong/wetext")
+
+        self.assertEqual(result, "downloaded-model")
+        self.assertEqual(download.call_count, 2)
+        self.assertTrue(download.call_args_list[0].kwargs["local_files_only"])
+        self.assertNotIn("local_files_only", download.call_args_list[1].kwargs)
+
     def test_model_logs_do_not_capture_protocol_stdout(self) -> None:
         worker = load_worker_script()
         protocol_output = io.StringIO()
