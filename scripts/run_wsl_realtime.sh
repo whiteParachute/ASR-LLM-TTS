@@ -16,16 +16,16 @@ if [[ ! -x .venv/bin/voice-assistant-realtime ]]; then
     exit 2
 fi
 
-if [[ ! -x .venv-tts/bin/python ]]; then
+if [[ ! -x .venv-cosyvoice/bin/python ]]; then
     printf '%s\n' \
-        'The isolated Qwen3-TTS environment is missing.' \
-        'Run ./scripts/install_wsl_tts_runtime.sh first.' >&2
+        'The isolated CosyVoice3 environment is missing.' \
+        'Run ./scripts/install_wsl_cosyvoice_runtime.sh first.' >&2
     exit 3
 fi
 
 if [[ ! -f voices/reference.wav ]]; then
     printf '%s\n' \
-        'The Qwen3-TTS reference voice is missing: voices/reference.wav' \
+        'The CosyVoice3 reference voice is missing: voices/reference.wav' \
         'See voices/README.md before starting the assistant.' >&2
     exit 4
 fi
