@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import time
 from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import IO, Any, Protocol
@@ -10,6 +11,8 @@ from voice_assistant.contracts import AudioChunk
 
 
 CommandRunner = Callable[..., Any]
+Clock = Callable[[], float]
+Sleeper = Callable[[float], None]
 
 
 class StreamProcess(Protocol):
@@ -37,10 +40,18 @@ class PaplayAudioPlayer:
         pulse_server: str | None = None,
         command_runner: CommandRunner | None = None,
         process_factory: ProcessFactory | None = None,
+        stream_tail_guard_ms: int = 0,
+        clock: Clock = time.monotonic,
+        sleeper: Sleeper = time.sleep,
     ) -> None:
+        if stream_tail_guard_ms < 0:
+            raise ValueError("Stream tail guard cannot be negative")
         self._pulse_server = pulse_server
         self._command_runner = command_runner or subprocess.run
         self._process_factory = process_factory or subprocess.Popen
+        self._stream_tail_guard_seconds = stream_tail_guard_ms / 1000
+        self._clock = clock
+        self._sleeper = sleeper
 
     def play(self, audio_path: Path) -> None:
         if not audio_path.is_file():
@@ -80,10 +91,19 @@ class PaplayAudioPlayer:
             process.wait(timeout=5.0)
             raise RuntimeError("paplay streaming stdin is unavailable")
 
+        playback_deadline = self._clock()
         try:
             self._write_chunk(process.stdin, first_chunk, first_chunk)
+            playback_deadline = self._extend_playback_deadline(
+                playback_deadline,
+                first_chunk,
+            )
             for chunk in iterator:
                 self._write_chunk(process.stdin, chunk, first_chunk)
+                playback_deadline = self._extend_playback_deadline(
+                    playback_deadline,
+                    chunk,
+                )
             process.stdin.close()
             return_code = process.wait()
         except BaseException:
@@ -98,6 +118,23 @@ class PaplayAudioPlayer:
 
         if return_code != 0:
             raise subprocess.CalledProcessError(return_code, command)
+
+        remaining_seconds = (
+            playback_deadline
+            + self._stream_tail_guard_seconds
+            - self._clock()
+        )
+        if remaining_seconds > 0:
+            self._sleeper(remaining_seconds)
+
+    def _extend_playback_deadline(
+        self,
+        current_deadline: float,
+        chunk: AudioChunk,
+    ) -> float:
+        return max(current_deadline, self._clock()) + (
+            chunk.duration_ms / 1000
+        )
 
     @staticmethod
     def _write_chunk(

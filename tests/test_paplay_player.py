@@ -36,6 +36,19 @@ class FakeStreamProcess:
         return self.returncode
 
 
+class FakeClock:
+    def __init__(self) -> None:
+        self.now = 0.0
+        self.sleeps: list[float] = []
+
+    def monotonic(self) -> float:
+        return self.now
+
+    def sleep(self, seconds: float) -> None:
+        self.sleeps.append(seconds)
+        self.now += seconds
+
+
 class PaplayAudioPlayerTest(unittest.TestCase):
     def test_plays_audio_through_selected_pulse_server(self) -> None:
         runner = Mock()
@@ -60,9 +73,13 @@ class PaplayAudioPlayerTest(unittest.TestCase):
     def test_streams_pcm_chunks_through_one_paplay_process(self) -> None:
         process = FakeStreamProcess()
         process_factory = Mock(return_value=process)
+        clock = FakeClock()
         player = PaplayAudioPlayer(
             pulse_server="unix:/test/PulseServer",
             process_factory=process_factory,
+            stream_tail_guard_ms=300,
+            clock=clock.monotonic,
+            sleeper=clock.sleep,
         )
         chunks = [
             AudioChunk(b"\x01\x00\x02\x00", sample_rate=24000),
@@ -91,6 +108,16 @@ class PaplayAudioPlayerTest(unittest.TestCase):
             b"\x01\x00\x02\x00\x03\x00\x04\x00",
         )
         self.assertTrue(process.stdin.close_called)
+        expected_audio_seconds = 4 / 24000
+        self.assertEqual(len(clock.sleeps), 1)
+        self.assertAlmostEqual(
+            clock.sleeps[0],
+            expected_audio_seconds + 0.3,
+        )
+
+    def test_rejects_negative_stream_tail_guard(self) -> None:
+        with self.assertRaisesRegex(ValueError, "cannot be negative"):
+            PaplayAudioPlayer(stream_tail_guard_ms=-1)
 
     def test_rejects_stream_format_changes(self) -> None:
         process = FakeStreamProcess()

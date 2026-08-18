@@ -42,10 +42,11 @@ tts:
 
 audio:
   playback_backend: paplay
+  playback_tail_guard_ms: 300
   sample_rate: 16000
   frame_duration_ms: 20
-  vad_mode: 2
-  start_trigger_ms: 100
+  vad_mode: 3
+  start_trigger_ms: 200
   end_silence_ms: 500
   pre_roll_ms: 200
   speech_timeout_seconds: 30.0

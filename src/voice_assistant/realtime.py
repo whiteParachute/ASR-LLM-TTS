@@ -353,7 +353,9 @@ def build_realtime_assistant(config: AppConfig) -> RealtimeVoiceAssistant:
         input_device=config.audio.input_device,
     )
     if config.audio.playback_backend == "paplay":
-        player: AudioPlayer = PaplayAudioPlayer()
+        player: AudioPlayer = PaplayAudioPlayer(
+            stream_tail_guard_ms=config.audio.playback_tail_guard_ms,
+        )
     elif config.audio.playback_backend == "sounddevice":
         player = SoundDeviceAudioPlayer(
             output_device=config.audio.output_device,
