@@ -5,9 +5,11 @@ its exact transcript in the `reference_text` field of the active YAML
 configuration. A 3–10 second clip with one speaker and little background
 noise is a good starting point.
 
-The checked-in configuration currently contains the transcript of Qwen's
-public voice-clone example. For a first smoke test, download the matching
-reference clip without committing the WAV file:
+The baseline configuration contains the transcript of Qwen's public
+voice-clone example. The WSL profile instead uses the official Chinese
+sample shipped with the pinned CosyVoice runtime. To try the baseline
+profile, download its matching reference clip without committing the WAV
+file:
 
 ```bash
 mkdir -p voices

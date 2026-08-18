@@ -42,10 +42,12 @@ models/Qwen3.5-4B
 models/Fun-CosyVoice3-0.5B-2512
 ```
 
-CosyVoice3 clones a reference voice. Before startup, prepare the
-reference WAV and its exact transcript as described in
-`voices/README.md`. The public Qwen sample configured by default can be
-downloaded with:
+CosyVoice3 clones a reference voice. The WSL profile defaults to the
+official Chinese CosyVoice sample installed at
+`.runtime/CosyVoice/asset/zero_shot_prompt.wav`, which keeps the reference
+language aligned with Chinese replies. To use a custom authorized voice,
+prepare its WAV and exact transcript as described in `voices/README.md`.
+The public Qwen sample used by the baseline profile can be downloaded with:
 
 ```bash
 mkdir -p voices

@@ -33,10 +33,8 @@ tts:
   worker_python: .venv-cosyvoice/bin/python
   worker_script: scripts/cosyvoice3_stream_worker.py
   runtime_dir: .runtime/CosyVoice
-  reference_audio: voices/reference.wav
-  reference_text: >-
-    Okay. Yeah. I resent you. I love you. I respect you. But you know what?
-    You blew it! And thanks to you.
+  reference_audio: .runtime/CosyVoice/asset/zero_shot_prompt.wav
+  reference_text: 希望你以后能够做的比我还好呦。
   x_vector_only_mode: false
   dtype: float16
   startup_timeout_seconds: 300

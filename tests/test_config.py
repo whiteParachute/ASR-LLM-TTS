@@ -90,6 +90,14 @@ class ConfigTest(unittest.TestCase):
             config.tts.runtime_dir,
             Path(".runtime/CosyVoice"),
         )
+        self.assertEqual(
+            config.tts.reference_audio,
+            Path(".runtime/CosyVoice/asset/zero_shot_prompt.wav"),
+        )
+        self.assertEqual(
+            config.tts.reference_text,
+            "希望你以后能够做的比我还好呦。",
+        )
         self.assertEqual(config.tts.dtype, "float16")
         self.assertEqual(config.tts.startup_timeout_seconds, 300)
         self.assertEqual(config.tts.inference_mode, "zero_shot")
