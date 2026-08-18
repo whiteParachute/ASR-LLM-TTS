@@ -114,6 +114,19 @@ Inspect the latest events after a test conversation with:
 tail -n 30 logs/wsl/performance.jsonl
 ```
 
+Measure the warmed TTS worker without microphone, ASR, LLM, playback, or
+WAV-writing overhead:
+
+```bash
+./scripts/benchmark_wsl_tts.sh --runs 5
+```
+
+The benchmark uses one fixed Chinese sentence for every run and reports
+model startup, time to first audio, total synthesis time, generated audio
+duration, first-chunk duration, chunk count, and real-time factor. Its JSON
+report is written under `logs/wsl/` so different TTS models or reference
+voices can be compared on the same hardware.
+
 Observability settings can be changed under `observability` in the YAML
 configuration. The generated `logs/` directory is ignored by Git.
 
