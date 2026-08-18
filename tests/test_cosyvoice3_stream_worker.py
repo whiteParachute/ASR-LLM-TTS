@@ -191,6 +191,40 @@ class CosyVoice3StreamingWorkerProviderTest(unittest.TestCase):
                 list(provider.stream_synthesize("  "))
             provider.close()
 
+    def test_sft_mode_uses_speaker_without_reference_audio(self) -> None:
+        process = FakeWorkerProcess(
+            [{"event": "ready", "sample_rate": 22050}]
+        )
+        process_factory = Mock(return_value=process)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            runtime_entrypoint = (
+                temp_path / "runtime/cosyvoice/cli/cosyvoice.py"
+            )
+            runtime_entrypoint.parent.mkdir(parents=True)
+            runtime_entrypoint.write_text("# fake", encoding="utf-8")
+            provider = CosyVoice3StreamingWorkerProvider(
+                model_name="models/CosyVoice-300M-SFT",
+                runtime_dir=temp_path / "runtime",
+                reference_audio=None,
+                reference_text="",
+                inference_mode="sft",
+                speaker="中文女",
+                load_jit=True,
+                process_factory=process_factory,
+            )
+            self.assertEqual(provider.sample_rate, 22050)
+            provider.close()
+
+        command = process_factory.call_args.args[0]
+        self.assertIn("--inference-mode", command)
+        self.assertIn("sft", command)
+        self.assertIn("--speaker", command)
+        self.assertIn("中文女", command)
+        self.assertIn("--load-jit", command)
+        self.assertNotIn("--reference-audio", command)
+
 
 if __name__ == "__main__":
     unittest.main()

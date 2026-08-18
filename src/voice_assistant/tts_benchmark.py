@@ -121,6 +121,27 @@ def override_reference_voice(
     )
 
 
+def override_tts_options(
+    config: AppConfig,
+    model: str | None,
+    inference_mode: str | None,
+    speaker: str | None,
+    load_jit: bool | None,
+) -> AppConfig:
+    updates: dict[str, object] = {}
+    if model is not None:
+        updates["model"] = model
+    if inference_mode is not None:
+        updates["inference_mode"] = inference_mode
+    if speaker is not None:
+        updates["speaker"] = speaker.strip()
+    if load_jit is not None:
+        updates["load_jit"] = load_jit
+    if not updates:
+        return config
+    return replace(config, tts=replace(config.tts, **updates))
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Benchmark the configured streaming TTS provider.",
@@ -159,6 +180,28 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Exact transcript paired with --reference-audio.",
     )
+    parser.add_argument(
+        "--model",
+        default=None,
+        help="Temporary TTS model override for this benchmark.",
+    )
+    parser.add_argument(
+        "--inference-mode",
+        choices=("zero_shot", "sft"),
+        default=None,
+        help="Temporary CosyVoice inference-mode override.",
+    )
+    parser.add_argument(
+        "--speaker",
+        default=None,
+        help="SFT speaker name used with --inference-mode sft.",
+    )
+    parser.add_argument(
+        "--load-jit",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Enable or disable the legacy CosyVoice JIT modules.",
+    )
     return parser
 
 
@@ -169,11 +212,21 @@ def execute(
     output_path: Path | None,
     reference_audio: Path | None = None,
     reference_text: str | None = None,
+    model: str | None = None,
+    inference_mode: str | None = None,
+    speaker: str | None = None,
+    load_jit: bool | None = None,
 ) -> tuple[dict[str, object], Path]:
-    config = override_reference_voice(
-        load_config(config_path),
-        reference_audio=reference_audio,
-        reference_text=reference_text,
+    config = override_tts_options(
+        override_reference_voice(
+            load_config(config_path),
+            reference_audio=reference_audio,
+            reference_text=reference_text,
+        ),
+        model=model,
+        inference_mode=inference_mode,
+        speaker=speaker,
+        load_jit=load_jit,
     )
 
     load_started_at = perf_counter()
@@ -212,6 +265,9 @@ def execute(
         "created_at": created_at.isoformat(),
         "provider": config.tts.provider,
         "model": config.tts.model,
+        "inference_mode": config.tts.inference_mode,
+        "speaker": config.tts.speaker or None,
+        "load_jit": config.tts.load_jit,
         "reference_audio": (
             str(config.tts.reference_audio)
             if config.tts.reference_audio is not None
@@ -242,6 +298,10 @@ def main() -> int:
             output_path=args.output,
             reference_audio=args.reference_audio,
             reference_text=args.reference_text,
+            model=args.model,
+            inference_mode=args.inference_mode,
+            speaker=args.speaker,
+            load_jit=args.load_jit,
         )
     except (OSError, RuntimeError, ValueError) as exc:
         parser.exit(status=1, message=f"error: {exc}\n")

@@ -93,5 +93,8 @@ def build_tts(config: TTSConfig) -> TTSProvider:
             fp16=config.dtype == "float16",
             warmup_text=config.warmup_text,
             startup_timeout_seconds=config.startup_timeout_seconds,
+            inference_mode=config.inference_mode,
+            speaker=config.speaker,
+            load_jit=config.load_jit,
         )
     raise ProviderConfigError(f"Unsupported TTS provider: {config.provider}")

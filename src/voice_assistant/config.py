@@ -61,6 +61,9 @@ class TTSConfig:
     max_new_tokens: int = 256
     startup_timeout_seconds: float = 180.0
     warmup_text: str = "你好，很高兴和你对话。"
+    inference_mode: str = "zero_shot"
+    speaker: str = ""
+    load_jit: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -212,6 +215,9 @@ def load_config(config_path: Path) -> AppConfig:
                     "warmup_text",
                     "你好，很高兴和你对话。",
                 ),
+                inference_mode=tts.get("inference_mode", "zero_shot"),
+                speaker=tts.get("speaker", ""),
+                load_jit=tts.get("load_jit", False),
             ),
             runtime=RuntimeConfig(
                 output_dir=Path(runtime["output_dir"]),

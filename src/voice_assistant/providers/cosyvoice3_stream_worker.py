@@ -49,14 +49,24 @@ class CosyVoice3StreamingWorkerProvider:
         fp16: bool = True,
         warmup_text: str = "你好，很高兴和你对话。",
         startup_timeout_seconds: float = 300.0,
+        inference_mode: str = "zero_shot",
+        speaker: str = "",
+        load_jit: bool = False,
         process_factory: ProcessFactory = subprocess.Popen,
     ) -> None:
-        if reference_audio is None:
-            raise ValueError("CosyVoice3 reference_audio is required")
-        if not reference_text.strip():
-            raise ValueError("CosyVoice3 reference_text is required")
+        if inference_mode not in {"zero_shot", "sft"}:
+            raise ValueError(
+                f"Unsupported CosyVoice inference mode: {inference_mode}"
+            )
+        if inference_mode == "zero_shot":
+            if reference_audio is None:
+                raise ValueError("CosyVoice reference_audio is required")
+            if not reference_text.strip():
+                raise ValueError("CosyVoice reference_text is required")
+        elif not speaker.strip():
+            raise ValueError("CosyVoice SFT speaker is required")
         if startup_timeout_seconds <= 0:
-            raise ValueError("CosyVoice3 startup timeout must be positive")
+            raise ValueError("CosyVoice startup timeout must be positive")
 
         runtime_path = runtime_dir.expanduser().resolve()
         runtime_entrypoint = runtime_path / "cosyvoice/cli/cosyvoice.py"
@@ -67,11 +77,14 @@ class CosyVoice3StreamingWorkerProvider:
                 f"{runtime_path}"
             )
 
-        reference_path = reference_audio.expanduser().resolve()
-        if not reference_path.is_file():
-            raise FileNotFoundError(
-                f"CosyVoice3 reference audio does not exist: {reference_path}"
-            )
+        reference_path: Path | None = None
+        if reference_audio is not None:
+            reference_path = reference_audio.expanduser().resolve()
+            if not reference_path.is_file():
+                raise FileNotFoundError(
+                    f"CosyVoice reference audio does not exist: "
+                    f"{reference_path}"
+                )
 
         model_argument = model_name
         model_path = Path(model_name).expanduser()
@@ -85,15 +98,28 @@ class CosyVoice3StreamingWorkerProvider:
             str(runtime_path),
             "--model",
             model_argument,
-            "--reference-audio",
-            str(reference_path),
-            "--reference-text",
-            reference_text,
+            "--inference-mode",
+            inference_mode,
             "--warmup-text",
             warmup_text,
         ]
+        if inference_mode == "zero_shot":
+            if reference_path is None:
+                raise RuntimeError("CosyVoice reference path is unavailable")
+            command.extend(
+                [
+                    "--reference-audio",
+                    str(reference_path),
+                    "--reference-text",
+                    reference_text,
+                ]
+            )
+        else:
+            command.extend(["--speaker", speaker.strip()])
         if fp16:
             command.append("--fp16")
+        if load_jit:
+            command.append("--load-jit")
 
         self._lock = threading.Lock()
         self._request_id = 0

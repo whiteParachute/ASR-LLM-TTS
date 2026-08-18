@@ -136,6 +136,19 @@ without changing the realtime configuration:
   --reference-text '希望你以后能够做的比我还好呦。'
 ```
 
+Download and benchmark the original fixed Chinese SFT voice with the same
+sentence and measurement code:
+
+```bash
+source .venv/bin/activate
+python scripts/download_wsl_models.py cosyvoice_sft
+./scripts/benchmark_wsl_tts.sh --runs 5 \
+  --model models/CosyVoice-300M-SFT \
+  --inference-mode sft \
+  --speaker 中文女 \
+  --load-jit
+```
+
 Observability settings can be changed under `observability` in the YAML
 configuration. The generated `logs/` directory is ignored by Git.
 

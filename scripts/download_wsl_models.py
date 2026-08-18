@@ -106,6 +106,23 @@ DOWNLOADS = {
             "speech_tokenizer_v3.onnx",
         ),
     ),
+    "cosyvoice_sft": ModelDownload(
+        repo_id="iic/CosyVoice-300M-SFT",
+        local_dir=Path("models/CosyVoice-300M-SFT"),
+        files=(
+            "campplus.onnx",
+            "configuration.json",
+            "cosyvoice.yaml",
+            "flow.encoder.fp16.zip",
+            "flow.pt",
+            "hift.pt",
+            "llm.llm.fp16.zip",
+            "llm.pt",
+            "llm.text_encoder.fp16.zip",
+            "speech_tokenizer_v1.onnx",
+            "spk2info.pt",
+        ),
+    ),
 }
 
 DEFAULT_DOWNLOADS = ("qwen_asr_hf", "qwen", "cosyvoice3")

@@ -6,6 +6,7 @@ from voice_assistant.contracts import AudioChunk
 from voice_assistant.tts_benchmark import (
     benchmark_streaming_tts,
     override_reference_voice,
+    override_tts_options,
     summarize_runs,
 )
 
@@ -68,6 +69,26 @@ class TTSBenchmarkTest(unittest.TestCase):
                 reference_audio=Path("voices/chinese.wav"),
                 reference_text=None,
             )
+
+    def test_overrides_model_and_sft_options(self) -> None:
+        project_root = Path(__file__).resolve().parents[1]
+        config = load_config(project_root / "configs/wsl_cuda.yaml")
+
+        overridden = override_tts_options(
+            config,
+            model="models/CosyVoice-300M-SFT",
+            inference_mode="sft",
+            speaker=" 中文女 ",
+            load_jit=True,
+        )
+
+        self.assertEqual(
+            overridden.tts.model,
+            "models/CosyVoice-300M-SFT",
+        )
+        self.assertEqual(overridden.tts.inference_mode, "sft")
+        self.assertEqual(overridden.tts.speaker, "中文女")
+        self.assertTrue(overridden.tts.load_jit)
 
     def test_measures_first_audio_total_audio_and_rtf(self) -> None:
         provider = FakeStreamingTTS()

@@ -219,6 +219,9 @@ class ProviderFactoryTest(unittest.TestCase):
             fp16=True,
             warmup_text="预热语音。",
             startup_timeout_seconds=300.0,
+            inference_mode="zero_shot",
+            speaker="",
+            load_jit=False,
         )
         self.assertIs(provider, mock_cosyvoice3.return_value)
 

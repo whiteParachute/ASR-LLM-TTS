@@ -19,14 +19,21 @@ def send(message: dict[str, Any]) -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Persistent streaming worker for CosyVoice3.",
+        description="Persistent streaming worker for CosyVoice models.",
     )
     parser.add_argument("--runtime-dir", type=Path, required=True)
     parser.add_argument("--model", required=True)
-    parser.add_argument("--reference-audio", type=Path, required=True)
-    parser.add_argument("--reference-text", required=True)
+    parser.add_argument(
+        "--inference-mode",
+        choices=("zero_shot", "sft"),
+        default="zero_shot",
+    )
+    parser.add_argument("--reference-audio", type=Path)
+    parser.add_argument("--reference-text", default="")
+    parser.add_argument("--speaker", default="")
     parser.add_argument("--warmup-text", default="你好，很高兴和你对话。")
     parser.add_argument("--fp16", action="store_true")
+    parser.add_argument("--load-jit", action="store_true")
     return parser
 
 
@@ -84,30 +91,56 @@ def main() -> int:
 
             prefer_cached_modelscope_download(modelscope)
 
-            model = AutoModel(
-                model_dir=args.model,
-                load_trt=False,
-                load_vllm=False,
-                fp16=args.fp16,
-            )
+            model_path = Path(args.model).expanduser()
+            if not model_path.exists():
+                model_path = Path(modelscope.snapshot_download(args.model))
+            model_options: dict[str, Any] = {
+                "model_dir": str(model_path.resolve()),
+                "load_trt": False,
+                "fp16": args.fp16,
+            }
+            if (model_path / "cosyvoice.yaml").is_file():
+                model_options["load_jit"] = args.load_jit
+            else:
+                model_options["load_vllm"] = False
+            model = AutoModel(**model_options)
+
             voice_id = "assistant_reference"
-            prompt_text = build_prompt_text(args.reference_text)
-            added = model.add_zero_shot_spk(
-                prompt_text,
-                str(args.reference_audio.expanduser().resolve()),
-                voice_id,
-            )
-            if added is not True:
-                raise RuntimeError("Unable to cache the reference voice")
+            if args.inference_mode == "zero_shot":
+                if args.reference_audio is None:
+                    raise ValueError("Zero-shot reference audio is required")
+                if not args.reference_text.strip():
+                    raise ValueError("Zero-shot reference text is required")
+                prompt_text = build_prompt_text(args.reference_text)
+                added = model.add_zero_shot_spk(
+                    prompt_text,
+                    str(args.reference_audio.expanduser().resolve()),
+                    voice_id,
+                )
+                if added is not True:
+                    raise RuntimeError("Unable to cache the reference voice")
+            else:
+                if args.speaker not in model.list_available_spks():
+                    raise ValueError(
+                        f"SFT speaker is unavailable: {args.speaker}"
+                    )
 
             if args.warmup_text.strip():
-                for _ in model.inference_zero_shot(
-                    args.warmup_text.strip(),
-                    "",
-                    "",
-                    zero_shot_spk_id=voice_id,
-                    stream=True,
-                ):
+                if args.inference_mode == "zero_shot":
+                    warmup_outputs = model.inference_zero_shot(
+                        args.warmup_text.strip(),
+                        "",
+                        "",
+                        zero_shot_spk_id=voice_id,
+                        stream=True,
+                    )
+                else:
+                    warmup_outputs = model.inference_sft(
+                        args.warmup_text.strip(),
+                        args.speaker,
+                        stream=True,
+                    )
+                for _ in warmup_outputs:
                     pass
     except BaseException as exc:
         send(
@@ -147,13 +180,20 @@ def main() -> int:
                 chunk_count = 0
                 sample_count = 0
                 with contextlib.redirect_stdout(sys.stderr):
-                    outputs = model.inference_zero_shot(
-                        text,
-                        "",
-                        "",
-                        zero_shot_spk_id=voice_id,
-                        stream=True,
-                    )
+                    if args.inference_mode == "zero_shot":
+                        outputs = model.inference_zero_shot(
+                            text,
+                            "",
+                            "",
+                            zero_shot_spk_id=voice_id,
+                            stream=True,
+                        )
+                    else:
+                        outputs = model.inference_sft(
+                            text,
+                            args.speaker,
+                            stream=True,
+                        )
                 for output in iter_model_outputs(outputs):
                     speech = output["tts_speech"]
                     speech = speech.detach().float().cpu().flatten()
@@ -183,7 +223,7 @@ def main() -> int:
                     )
 
                 if chunk_count == 0:
-                    raise RuntimeError("CosyVoice3 returned no audio")
+                    raise RuntimeError("CosyVoice returned no audio")
                 send(
                     {
                         "id": request_id,
