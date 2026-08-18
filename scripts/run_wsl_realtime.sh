@@ -23,13 +23,6 @@ if [[ ! -x .venv-cosyvoice/bin/python ]]; then
     exit 3
 fi
 
-if [[ ! -f voices/reference.wav ]]; then
-    printf '%s\n' \
-        'The CosyVoice3 reference voice is missing: voices/reference.wav' \
-        'See voices/README.md before starting the assistant.' >&2
-    exit 4
-fi
-
 export PATH="/usr/lib/wsl/lib:$PATH"
 if [[ -z "${PULSE_SERVER:-}" && -S /mnt/wslg/PulseServer ]]; then
     export PULSE_SERVER=unix:/mnt/wslg/PulseServer
