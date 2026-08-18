@@ -22,6 +22,10 @@ class RawInputStream(Protocol):
 StreamFactory = Callable[..., AbstractContextManager[RawInputStream]]
 
 
+class MicrophoneStreamError(RuntimeError):
+    """Raised when the audio backend stops the microphone stream."""
+
+
 class SoundDeviceVADRecorder:
     """Record one utterance and stop after VAD detects trailing silence."""
 
@@ -41,6 +45,7 @@ class SoundDeviceVADRecorder:
         input_device: int | str | None = None,
         vad: VoiceActivityDetector | None = None,
         stream_factory: StreamFactory | None = None,
+        stream_error_types: tuple[type[Exception], ...] | None = None,
     ) -> None:
         self._validate_settings(
             sample_rate=sample_rate,
@@ -81,8 +86,15 @@ class SoundDeviceVADRecorder:
             import sounddevice as sd
 
             self._stream_factory = sd.RawInputStream
+            default_stream_error_types = (sd.PortAudioError,)
         else:
             self._stream_factory = stream_factory
+            default_stream_error_types = ()
+        self._stream_error_types = (
+            default_stream_error_types
+            if stream_error_types is None
+            else stream_error_types
+        )
 
     def record(self, output_path: Path) -> Path:
         pre_roll: deque[bytes] = deque(maxlen=self._pre_roll_frames)
@@ -92,59 +104,66 @@ class SoundDeviceVADRecorder:
         waited_frames = 0
         triggered = False
 
-        with self._stream_factory(
-            samplerate=self._sample_rate,
-            blocksize=self._frame_samples,
-            device=self._input_device,
-            channels=1,
-            dtype="int16",
-        ) as stream:
-            while True:
-                data, overflowed = stream.read(self._frame_samples)
-                if overflowed:
-                    raise RuntimeError("Microphone input overflowed")
+        try:
+            with self._stream_factory(
+                samplerate=self._sample_rate,
+                blocksize=self._frame_samples,
+                device=self._input_device,
+                channels=1,
+                dtype="int16",
+            ) as stream:
+                while True:
+                    data, overflowed = stream.read(self._frame_samples)
+                    if overflowed:
+                        raise RuntimeError("Microphone input overflowed")
 
-                frame = bytes(data)
-                if len(frame) != self._expected_frame_bytes:
-                    raise RuntimeError(
-                        "Microphone returned an invalid PCM frame: "
-                        f"expected {self._expected_frame_bytes} bytes, "
-                        f"got {len(frame)}"
+                    frame = bytes(data)
+                    if len(frame) != self._expected_frame_bytes:
+                        raise RuntimeError(
+                            "Microphone returned an invalid PCM frame: "
+                            f"expected {self._expected_frame_bytes} bytes, "
+                            f"got {len(frame)}"
+                        )
+
+                    is_speech = self._vad.is_speech(
+                        frame,
+                        self._sample_rate,
                     )
 
-                is_speech = self._vad.is_speech(
-                    frame,
-                    self._sample_rate,
-                )
+                    if not triggered:
+                        waited_frames += 1
+                        pre_roll.append(frame)
+                        consecutive_speech = (
+                            consecutive_speech + 1 if is_speech else 0
+                        )
 
-                if not triggered:
-                    waited_frames += 1
-                    pre_roll.append(frame)
-                    consecutive_speech = (
-                        consecutive_speech + 1 if is_speech else 0
-                    )
+                        if consecutive_speech >= self._start_trigger_frames:
+                            triggered = True
+                            recorded_frames.extend(pre_roll)
+                            pre_roll.clear()
+                            continue
 
-                    if consecutive_speech >= self._start_trigger_frames:
-                        triggered = True
-                        recorded_frames.extend(pre_roll)
-                        pre_roll.clear()
+                        if waited_frames >= self._speech_timeout_frames:
+                            raise TimeoutError(
+                                "No speech detected before timeout"
+                            )
                         continue
 
-                    if waited_frames >= self._speech_timeout_frames:
-                        raise TimeoutError(
-                            "No speech detected before timeout"
-                        )
-                    continue
+                    recorded_frames.append(frame)
+                    consecutive_silence = (
+                        0 if is_speech else consecutive_silence + 1
+                    )
 
-                recorded_frames.append(frame)
-                consecutive_silence = (
-                    0 if is_speech else consecutive_silence + 1
-                )
-
-                if consecutive_silence >= self._end_silence_frames:
-                    break
-                if len(recorded_frames) >= self._max_utterance_frames:
-                    break
+                    if consecutive_silence >= self._end_silence_frames:
+                        break
+                    if len(recorded_frames) >= self._max_utterance_frames:
+                        break
+        except Exception as exc:
+            if not isinstance(exc, self._stream_error_types):
+                raise
+            raise MicrophoneStreamError(
+                "Microphone input stream stopped unexpectedly"
+            ) from exc
 
         return self._write_wav(output_path, recorded_frames)
 

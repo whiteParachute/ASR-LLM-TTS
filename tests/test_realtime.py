@@ -3,8 +3,9 @@ import tempfile
 import threading
 import unittest
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
+from voice_assistant.audio import MicrophoneStreamError
 from voice_assistant.contracts import AudioChunk, PreparedResponse
 from voice_assistant.realtime import RealtimeVoiceAssistant
 from voice_assistant.observability import PerformanceLogger, measure_stage
@@ -163,6 +164,33 @@ class RealtimeVoiceAssistantTest(unittest.TestCase):
             assistant.run_forever()
 
         self.assertEqual(assistant.run_turn.call_count, 2)
+
+    def test_reopens_microphone_after_stream_error(self) -> None:
+        assistant = RealtimeVoiceAssistant(
+            pipeline=FakePipeline(),
+            recorder=FakeRecorder(),
+            player=FakePlayer(),
+            output_dir=Path("turns"),
+        )
+        assistant.run_turn = Mock(
+            side_effect=[
+                MicrophoneStreamError("stream stopped"),
+                KeyboardInterrupt,
+            ],
+        )
+
+        with (
+            patch("voice_assistant.realtime.print") as print_mock,
+            patch("voice_assistant.realtime.time.sleep") as sleep_mock,
+            self.assertRaises(KeyboardInterrupt),
+        ):
+            assistant.run_forever()
+
+        self.assertEqual(assistant.run_turn.call_count, 2)
+        sleep_mock.assert_called_once_with(0.5)
+        print_mock.assert_called_once_with(
+            "麦克风连接已中断，正在重连：stream stopped"
+        )
 
     def test_runs_record_inference_and_playback_in_order(self) -> None:
         recorder = FakeRecorder()

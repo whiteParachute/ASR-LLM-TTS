@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import time
 import wave
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
@@ -12,6 +13,7 @@ from pathlib import Path
 from typing import Iterator, Protocol
 
 from voice_assistant.audio import (
+    MicrophoneStreamError,
     PaplayAudioPlayer,
     SoundDeviceAudioPlayer,
     SoundDeviceVADRecorder,
@@ -310,6 +312,10 @@ class RealtimeVoiceAssistant:
             try:
                 self.run_turn()
             except TimeoutError:
+                continue
+            except MicrophoneStreamError as exc:
+                print(f"麦克风连接已中断，正在重连：{exc}")
+                time.sleep(0.5)
                 continue
             except (ValueError, RuntimeError) as exc:
                 print(f"本轮已跳过：{exc}")

@@ -92,6 +92,10 @@ class ConfigTest(unittest.TestCase):
         )
         self.assertEqual(config.tts.dtype, "float16")
         self.assertEqual(config.tts.startup_timeout_seconds, 300)
+        self.assertEqual(config.audio.vad_mode, 2)
+        self.assertEqual(config.audio.start_trigger_ms, 100)
+        self.assertEqual(config.audio.end_silence_ms, 500)
+        self.assertIn("不超过15个汉字", config.llm.reply_instruction)
 
 if  __name__ == "__main__":
     unittest.main()

@@ -4,7 +4,10 @@ import wave
 from pathlib import Path
 from typing import Any
 
-from voice_assistant.audio.vad_recorder import SoundDeviceVADRecorder
+from voice_assistant.audio.vad_recorder import (
+    MicrophoneStreamError,
+    SoundDeviceVADRecorder,
+)
 
 
 SILENCE_FRAME = b"\x00\x00" * 320
@@ -39,6 +42,21 @@ class FakeStreamFactory:
     def __call__(self, **kwargs: Any) -> FakeInputStream:
         self.kwargs = kwargs
         return FakeInputStream(self.frames)
+
+
+class FakeStreamError(Exception):
+    pass
+
+
+class FailingInputStream:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args: Any) -> None:
+        return None
+
+    def read(self, frames: int) -> tuple[bytes, bool]:
+        raise FakeStreamError("stream stopped")
 
 
 class SoundDeviceVADRecorderTest(unittest.TestCase):
@@ -94,6 +112,21 @@ class SoundDeviceVADRecorderTest(unittest.TestCase):
             "No speech detected before timeout",
         ):
             recorder.record(Path("unused.wav"))
+
+    def test_wraps_audio_backend_error_for_realtime_recovery(self) -> None:
+        recorder = SoundDeviceVADRecorder(
+            vad=FakeVAD(),
+            stream_factory=lambda **kwargs: FailingInputStream(),
+            stream_error_types=(FakeStreamError,),
+        )
+
+        with self.assertRaisesRegex(
+            MicrophoneStreamError,
+            "Microphone input stream stopped unexpectedly",
+        ) as caught:
+            recorder.record(Path("unused.wav"))
+
+        self.assertIsInstance(caught.exception.__cause__, FakeStreamError)
 
 
 if __name__ == "__main__":
