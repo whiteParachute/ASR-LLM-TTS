@@ -127,6 +127,15 @@ duration, first-chunk duration, chunk count, and real-time factor. Its JSON
 report is written under `logs/wsl/` so different TTS models or reference
 voices can be compared on the same hardware.
 
+For a reference-voice A/B test, override the WAV and its exact transcript
+without changing the realtime configuration:
+
+```bash
+./scripts/benchmark_wsl_tts.sh --runs 5 \
+  --reference-audio .runtime/CosyVoice/asset/zero_shot_prompt.wav \
+  --reference-text '希望你以后能够做的比我还好呦。'
+```
+
 Observability settings can be changed under `observability` in the YAML
 configuration. The generated `logs/` directory is ignored by Git.
 

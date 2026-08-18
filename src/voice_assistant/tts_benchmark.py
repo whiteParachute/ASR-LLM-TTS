@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import argparse
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from statistics import median
 from time import perf_counter
 from typing import Callable
 
-from voice_assistant.config import load_config
+from voice_assistant.config import AppConfig, load_config
 from voice_assistant.contracts import AudioChunk, StreamingTTSProvider
 from voice_assistant.providers.factory import build_tts
 
@@ -97,6 +97,30 @@ def summarize_runs(runs: list[TTSBenchmarkRun]) -> dict[str, float]:
     }
 
 
+def override_reference_voice(
+    config: AppConfig,
+    reference_audio: Path | None,
+    reference_text: str | None,
+) -> AppConfig:
+    if reference_audio is None and reference_text is None:
+        return config
+    if reference_audio is None or reference_text is None:
+        raise ValueError(
+            "Reference audio and reference text must be overridden together"
+        )
+    cleaned_text = reference_text.strip()
+    if not cleaned_text:
+        raise ValueError("Reference text cannot be empty")
+    return replace(
+        config,
+        tts=replace(
+            config.tts,
+            reference_audio=reference_audio,
+            reference_text=cleaned_text,
+        ),
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Benchmark the configured streaming TTS provider.",
@@ -124,6 +148,17 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="JSON report path. Defaults to the configured log directory.",
     )
+    parser.add_argument(
+        "--reference-audio",
+        type=Path,
+        default=None,
+        help="Temporary reference WAV override for this benchmark.",
+    )
+    parser.add_argument(
+        "--reference-text",
+        default=None,
+        help="Exact transcript paired with --reference-audio.",
+    )
     return parser
 
 
@@ -132,8 +167,14 @@ def execute(
     text: str,
     runs: int,
     output_path: Path | None,
+    reference_audio: Path | None = None,
+    reference_text: str | None = None,
 ) -> tuple[dict[str, object], Path]:
-    config = load_config(config_path)
+    config = override_reference_voice(
+        load_config(config_path),
+        reference_audio=reference_audio,
+        reference_text=reference_text,
+    )
 
     load_started_at = perf_counter()
     provider = build_tts(config.tts)
@@ -171,6 +212,12 @@ def execute(
         "created_at": created_at.isoformat(),
         "provider": config.tts.provider,
         "model": config.tts.model,
+        "reference_audio": (
+            str(config.tts.reference_audio)
+            if config.tts.reference_audio is not None
+            else None
+        ),
+        "reference_text_characters": len(config.tts.reference_text),
         "text_characters": len(text.strip()),
         "runs_requested": runs,
         "model_load_seconds": load_seconds,
@@ -193,6 +240,8 @@ def main() -> int:
             text=args.text,
             runs=args.runs,
             output_path=args.output,
+            reference_audio=args.reference_audio,
+            reference_text=args.reference_text,
         )
     except (OSError, RuntimeError, ValueError) as exc:
         parser.exit(status=1, message=f"error: {exc}\n")

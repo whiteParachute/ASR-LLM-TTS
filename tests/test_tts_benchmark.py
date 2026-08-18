@@ -1,8 +1,11 @@
 import unittest
+from pathlib import Path
 
+from voice_assistant.config import load_config
 from voice_assistant.contracts import AudioChunk
 from voice_assistant.tts_benchmark import (
     benchmark_streaming_tts,
+    override_reference_voice,
     summarize_runs,
 )
 
@@ -35,6 +38,37 @@ class SequenceClock:
 
 
 class TTSBenchmarkTest(unittest.TestCase):
+    def test_overrides_reference_audio_and_text_together(self) -> None:
+        project_root = Path(__file__).resolve().parents[1]
+        config = load_config(project_root / "configs/wsl_cuda.yaml")
+
+        overridden = override_reference_voice(
+            config,
+            reference_audio=Path("voices/chinese.wav"),
+            reference_text=" 这是中文参考。 ",
+        )
+
+        self.assertEqual(
+            overridden.tts.reference_audio,
+            Path("voices/chinese.wav"),
+        )
+        self.assertEqual(overridden.tts.reference_text, "这是中文参考。")
+        self.assertNotEqual(
+            overridden.tts.reference_audio,
+            config.tts.reference_audio,
+        )
+
+    def test_requires_paired_reference_override(self) -> None:
+        project_root = Path(__file__).resolve().parents[1]
+        config = load_config(project_root / "configs/wsl_cuda.yaml")
+
+        with self.assertRaisesRegex(ValueError, "together"):
+            override_reference_voice(
+                config,
+                reference_audio=Path("voices/chinese.wav"),
+                reference_text=None,
+            )
+
     def test_measures_first_audio_total_audio_and_rtf(self) -> None:
         provider = FakeStreamingTTS()
         clock = SequenceClock([10.0, 10.25, 10.5, 20.0, 20.4, 20.8])
