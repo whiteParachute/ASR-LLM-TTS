@@ -114,5 +114,33 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(config.audio.end_silence_ms, 500)
         self.assertIn("不超过15个汉字", config.llm.reply_instruction)
 
+    def test_loads_cosyvoice_sft_comparison_config(self) -> None:
+        config = load_config(
+            PROJECT_ROOT / "configs" / "wsl_cuda_sft.yaml"
+        )
+
+        self.assertEqual(
+            config.tts.provider,
+            "cosyvoice3_stream_worker",
+        )
+        self.assertEqual(
+            config.tts.model,
+            "models/CosyVoice-300M-SFT",
+        )
+        self.assertEqual(config.tts.sample_rate, 22050)
+        self.assertEqual(config.tts.inference_mode, "sft")
+        self.assertEqual(config.tts.speaker, "中文女")
+        self.assertIsNone(config.tts.reference_audio)
+        self.assertEqual(config.tts.reference_text, "")
+        self.assertFalse(config.tts.load_jit)
+        self.assertEqual(config.audio.playback_latency_ms, 40)
+        self.assertEqual(config.audio.playback_process_time_ms, 20)
+        self.assertEqual(config.audio.playback_tail_guard_ms, 300)
+        self.assertEqual(config.runtime.output_dir, Path("output/wsl-sft"))
+        self.assertEqual(
+            config.observability.log_dir,
+            Path("logs/wsl-sft"),
+        )
+
 if  __name__ == "__main__":
     unittest.main()

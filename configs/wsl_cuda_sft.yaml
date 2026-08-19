@@ -1,0 +1,65 @@
+asr:
+  provider: qwen3_asr_transformers
+  model: models/Qwen3-ASR-0.6B-hf
+  language: auto
+  device: cuda:0
+  compute_dtype: bfloat16
+  attention_implementation: sdpa
+  max_new_tokens: 256
+  prompt: ""
+
+llm:
+  provider: qwen35_transformers
+  model: models/Qwen3.5-4B
+  max_new_tokens: 128
+  load_in_4bit: true
+  compute_dtype: float16
+  enable_thinking: false
+  do_sample: true
+  temperature: 0.7
+  top_p: 0.8
+  top_k: 20
+  system_prompt: 你是一个友好的中文语音助手
+  reply_instruction: 只用一句自然口语直接回答，尽量不超过15个汉字；不要复述问题。
+
+tts:
+  provider: cosyvoice3_stream_worker
+  model: models/CosyVoice-300M-SFT
+  language_code: Chinese
+  default_voice: 中文女
+  sample_rate: 22050
+  output_format: wav
+  device: cuda:0
+  worker_python: .venv-cosyvoice/bin/python
+  worker_script: scripts/cosyvoice3_stream_worker.py
+  runtime_dir: .runtime/CosyVoice
+  dtype: float16
+  startup_timeout_seconds: 300
+  warmup_text: 你好，很高兴和你对话。
+  inference_mode: sft
+  speaker: 中文女
+  load_jit: false
+
+audio:
+  playback_backend: paplay
+  playback_latency_ms: 40
+  playback_process_time_ms: 20
+  playback_tail_guard_ms: 300
+  sample_rate: 16000
+  frame_duration_ms: 20
+  vad_mode: 3
+  start_trigger_ms: 200
+  end_silence_ms: 500
+  pre_roll_ms: 200
+  speech_timeout_seconds: 30.0
+  max_utterance_seconds: 30.0
+
+runtime:
+  output_dir: output/wsl-sft
+  reply_chunk_max_chars: 18
+
+observability:
+  enabled: true
+  console: true
+  jsonl: true
+  log_dir: logs/wsl-sft

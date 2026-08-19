@@ -69,9 +69,23 @@ Start continuous microphone conversation:
 ```
 
 Speak after the startup message. The recorder starts on speech, stops
-after 800 ms of silence, processes the turn, plays the reply through
+after 500 ms of silence, processes the turn, plays the reply through
 WSLg PulseAudio, and then listens for the next turn. Press `Ctrl+C` to
 stop.
+
+For an A/B comparison with the original fixed `中文女` SFT voice, first
+download its model and launch the separate profile:
+
+```bash
+source .venv/bin/activate
+python scripts/download_wsl_models.py cosyvoice_sft
+deactivate
+./scripts/run_wsl_realtime.sh --config configs/wsl_cuda_sft.yaml
+```
+
+This profile keeps the same ASR, LLM, VAD, and low-latency WSLg playback
+settings. It writes recordings to `output/wsl-sft/` and performance logs
+to `logs/wsl-sft/`, leaving the CosyVoice3 profile unchanged.
 
 CosyVoice3 returns PCM audio chunks as they are generated. One
 persistent `paplay --raw` process receives those chunks and plays them
