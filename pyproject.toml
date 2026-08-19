@@ -12,6 +12,7 @@ requires-python = ">=3.11,<3.13"
 voice-assistant = "voice_assistant.cli:main"
 voice-assistant-realtime = "voice_assistant.realtime:main"
 voice-assistant-benchmark-tts = "voice_assistant.tts_benchmark:main"
+voice-assistant-report-performance = "voice_assistant.performance_report:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

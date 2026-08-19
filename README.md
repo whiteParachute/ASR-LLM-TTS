@@ -126,6 +126,18 @@ Inspect the latest events after a test conversation with:
 tail -n 30 logs/wsl/performance.jsonl
 ```
 
+Summarize the latest successful session by stage, or exclude its first
+successful turn to focus on warmed latency:
+
+```bash
+./scripts/report_wsl_performance.sh
+./scripts/report_wsl_performance.sh --warmed-only
+```
+
+The derived `tts_first_chunk` row is
+`time_to_first_audio - response_prepare`, which isolates the wait between
+the completed ASR/LLM preparation and the first playable TTS chunk.
+
 Measure the warmed TTS worker without microphone, ASR, LLM, playback, or
 WAV-writing overhead:
 
