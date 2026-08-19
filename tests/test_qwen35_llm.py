@@ -26,8 +26,15 @@ class FakeModel:
         return [[1, 2, 3, 9, 10]]
 
 
+class FailingModel(FakeModel):
+    def generate(self, **kwargs: Any) -> Any:
+        self.received_arguments = kwargs
+        raise ValueError("generation failed")
+
+
 class FakeProcessor:
     def __init__(self, decoded: str = " 模型回答 ") -> None:
+        self.tokenizer = object()
         self.batch = FakeBatch()
         self.decoded = decoded
         self.template_arguments: dict[str, Any] = {}
@@ -52,6 +59,26 @@ class FakeProcessor:
     ) -> str:
         self.received_decode_ids = token_ids
         return self.decoded
+
+
+class FakeTextIteratorStreamer:
+    parts = ["模型", "回答"]
+
+    def __init__(self, tokenizer: Any, **kwargs: Any) -> None:
+        self.tokenizer = tokenizer
+        self.kwargs = kwargs
+        self.finalized = False
+
+    def __iter__(self):
+        return iter(self.parts)
+
+    def on_finalized_text(
+        self,
+        text: str,
+        *,
+        stream_end: bool,
+    ) -> None:
+        self.finalized = stream_end
 
 
 class Qwen35LLMTest(unittest.TestCase):
@@ -102,6 +129,75 @@ class Qwen35LLMTest(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "Messages cannot be empty"):
             provider.generate([])
+
+    def test_streams_generated_text(self) -> None:
+        model = FakeModel()
+        processor = FakeProcessor()
+        provider = Qwen35LLM(
+            model_name="test-model",
+            do_sample=False,
+            model=model,
+            processor=processor,
+            streamer_factory=FakeTextIteratorStreamer,
+        )
+
+        parts = list(
+            provider.stream_generate(
+                [Message(role="user", content="你好")]
+            )
+        )
+
+        self.assertEqual(parts, ["模型", "回答"])
+        self.assertIs(
+            model.received_arguments["streamer"].tokenizer,
+            processor.tokenizer,
+        )
+        self.assertFalse(model.received_arguments["do_sample"])
+
+    def test_rejects_empty_streamed_response(self) -> None:
+        provider = Qwen35LLM(
+            model_name="test-model",
+            model=FakeModel(),
+            processor=FakeProcessor(),
+            streamer_factory=FakeTextIteratorStreamer,
+        )
+
+        original_parts = FakeTextIteratorStreamer.parts
+        FakeTextIteratorStreamer.parts = []
+        try:
+            with self.assertRaisesRegex(RuntimeError, "empty response"):
+                list(
+                    provider.stream_generate(
+                        [Message(role="user", content="你好")]
+                    )
+                )
+        finally:
+            FakeTextIteratorStreamer.parts = original_parts
+
+    def test_surfaces_streaming_generation_error(self) -> None:
+        provider = Qwen35LLM(
+            model_name="test-model",
+            model=FailingModel(),
+            processor=FakeProcessor(),
+            streamer_factory=FakeTextIteratorStreamer,
+        )
+
+        original_parts = FakeTextIteratorStreamer.parts
+        FakeTextIteratorStreamer.parts = []
+        try:
+            with self.assertRaisesRegex(
+                RuntimeError,
+                "streaming generation failed",
+            ) as caught:
+                list(
+                    provider.stream_generate(
+                        [Message(role="user", content="你好")]
+                    )
+                )
+        finally:
+            FakeTextIteratorStreamer.parts = original_parts
+
+        self.assertIsInstance(caught.exception.__cause__, ValueError)
 
     def test_rejects_empty_response(self) -> None:
         provider = Qwen35LLM(

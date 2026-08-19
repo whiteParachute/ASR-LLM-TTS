@@ -1,8 +1,14 @@
 from __future__ import annotations
 
-from typing import Any, Protocol, Sequence
+import queue
+from collections.abc import Iterator
+from threading import Thread
+from typing import Any, Callable, Protocol, Sequence
 
 from voice_assistant.contracts import Message
+
+
+StreamerFactory = Callable[..., Any]
 
 
 class Qwen35Model(Protocol):
@@ -13,6 +19,8 @@ class Qwen35Model(Protocol):
 
 
 class Qwen35Processor(Protocol):
+    tokenizer: Any
+
     def apply_chat_template(
         self,
         messages: list[dict[str, Any]],
@@ -48,6 +56,7 @@ class Qwen35LLM:
         top_k: int = 20,
         model: Qwen35Model | None = None,
         processor: Qwen35Processor | None = None,
+        streamer_factory: StreamerFactory | None = None,
     ) -> None:
         if (model is None) != (processor is None):
             raise ValueError("model and processor must be provided together")
@@ -63,6 +72,7 @@ class Qwen35LLM:
         self._temperature = temperature
         self._top_p = top_p
         self._top_k = top_k
+        self._streamer_factory = streamer_factory
 
         if model is None:
             import torch
@@ -95,6 +105,77 @@ class Qwen35LLM:
             self._processor = processor
 
     def generate(self, messages: Sequence[Message]) -> str:
+        model_inputs, generation_kwargs = self._prepare_generation(messages)
+
+        generated_ids = self._model.generate(
+            **model_inputs,
+            **generation_kwargs,
+        )
+        input_length = len(model_inputs["input_ids"][0])
+        answer_ids = generated_ids[0][input_length:]
+        reply = self._processor.decode(
+            answer_ids,
+            skip_special_tokens=True,
+        ).strip()
+
+        if not reply:
+            raise RuntimeError("Qwen3.5 returned an empty response")
+
+        return reply
+
+    def stream_generate(self, messages: Sequence[Message]) -> Iterator[str]:
+        streamer_factory = self._streamer_factory
+        if streamer_factory is None:
+            from transformers import TextIteratorStreamer
+
+            streamer_factory = TextIteratorStreamer
+
+        model_inputs, generation_kwargs = self._prepare_generation(messages)
+        streamer = streamer_factory(
+            self._processor.tokenizer,
+            skip_prompt=True,
+            skip_special_tokens=True,
+            timeout=60.0,
+        )
+        errors: queue.SimpleQueue[BaseException] = queue.SimpleQueue()
+
+        def run_generation() -> None:
+            try:
+                self._model.generate(
+                    **model_inputs,
+                    **generation_kwargs,
+                    streamer=streamer,
+                )
+            except BaseException as exc:
+                errors.put(exc)
+                streamer.on_finalized_text("", stream_end=True)
+
+        generation_thread = Thread(
+            target=run_generation,
+            name="qwen35-stream-generate",
+            daemon=True,
+        )
+        generation_thread.start()
+
+        combined_reply = ""
+        for text in streamer:
+            if text:
+                combined_reply += text
+                yield text
+        generation_thread.join()
+
+        if not errors.empty():
+            error = errors.get()
+            raise RuntimeError(
+                "Qwen3.5 streaming generation failed"
+            ) from error
+        if not combined_reply.strip():
+            raise RuntimeError("Qwen3.5 returned an empty response")
+
+    def _prepare_generation(
+        self,
+        messages: Sequence[Message],
+    ) -> tuple[Any, dict[str, Any]]:
         if not messages:
             raise ValueError("Messages cannot be empty")
 
@@ -131,19 +212,4 @@ class Qwen35LLM:
                 top_p=self._top_p,
                 top_k=self._top_k,
             )
-
-        generated_ids = self._model.generate(
-            **model_inputs,
-            **generation_kwargs,
-        )
-        input_length = len(model_inputs["input_ids"][0])
-        answer_ids = generated_ids[0][input_length:]
-        reply = self._processor.decode(
-            answer_ids,
-            skip_special_tokens=True,
-        ).strip()
-
-        if not reply:
-            raise RuntimeError("Qwen3.5 returned an empty response")
-
-        return reply
+        return model_inputs, generation_kwargs
