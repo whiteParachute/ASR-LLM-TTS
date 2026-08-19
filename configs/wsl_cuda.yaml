@@ -57,7 +57,7 @@ audio:
 runtime:
   output_dir: output/wsl
   reply_chunk_max_chars: 18
-  stream_llm_to_tts: true
+  stream_llm_to_tts: false
   first_reply_chunk_chars: 6
 
 observability:

@@ -27,9 +27,10 @@ Planned increments:
    log.
 2. ✅ Separate cold-start, first-turn, and warmed-turn measurements.
 3. Warm the useful ASR/LLM/TTS paths only when the startup trade-off is clear.
-4. 🟡 Stream LLM output into short TTS work instead of waiting for the
-   complete reply. The code is ready; Windows latency/naturalness validation
-   is pending.
+4. 🧪 Keep the implemented LLM-to-TTS streaming path experimental. A
+   Windows test reduced warmed median time to first audio to about 1.55
+   seconds, but independent short TTS segments degraded Chinese prosody and
+   retriggered the microphone. The stable profiles therefore keep it off.
 5. Re-evaluate quantization and inference backends only after stage timings
    show they are the bottleneck.
 

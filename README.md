@@ -90,12 +90,13 @@ one reply WAV for debugging. Non-streaming TTS providers retain the
 punctuation-based fallback controlled by
 `runtime.reply_chunk_max_chars`.
 
-The two WSL profiles also feed Qwen3.5 text into CosyVoice while the LLM
-is still generating. The first TTS request starts after roughly
-`runtime.first_reply_chunk_chars` characters (or an earlier sentence
-boundary); later segments use `runtime.reply_chunk_max_chars`. Set
-`runtime.stream_llm_to_tts: false` to retain the complete-reply path for
-an A/B comparison.
+An experimental path can feed Qwen3.5 text into CosyVoice while the LLM
+is still generating. Set `runtime.stream_llm_to_tts: true` to start the
+first TTS request after roughly `runtime.first_reply_chunk_chars`
+characters (or an earlier sentence boundary); later segments use
+`runtime.reply_chunk_max_chars`. The WSL profiles keep this disabled by
+default because short, independently synthesized segments degraded Chinese
+prosody and retriggered the microphone during same-machine testing.
 
 Run the test suite with:
 
