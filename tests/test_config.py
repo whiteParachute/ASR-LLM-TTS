@@ -59,6 +59,8 @@ class ConfigTest(unittest.TestCase):
             config.audio.playback_backend,
             "sounddevice",
         )
+        self.assertIsNone(config.audio.playback_latency_ms)
+        self.assertIsNone(config.audio.playback_process_time_ms)
         self.assertEqual(config.audio.playback_tail_guard_ms, 0)
         self.assertEqual(config.audio.frame_duration_ms, 20)
         self.assertEqual(config.audio.vad_mode, 2)
@@ -104,6 +106,8 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(config.tts.inference_mode, "zero_shot")
         self.assertEqual(config.tts.speaker, "")
         self.assertFalse(config.tts.load_jit)
+        self.assertEqual(config.audio.playback_latency_ms, 40)
+        self.assertEqual(config.audio.playback_process_time_ms, 20)
         self.assertEqual(config.audio.playback_tail_guard_ms, 300)
         self.assertEqual(config.audio.vad_mode, 3)
         self.assertEqual(config.audio.start_trigger_ms, 200)

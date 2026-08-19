@@ -42,6 +42,8 @@ tts:
 
 audio:
   playback_backend: paplay
+  playback_latency_ms: 40
+  playback_process_time_ms: 20
   playback_tail_guard_ms: 300
   sample_rate: 16000
   frame_duration_ms: 20

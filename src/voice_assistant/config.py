@@ -83,6 +83,8 @@ class ObservabilityConfig:
 @dataclass(frozen=True, slots=True)
 class AudioConfig:
     playback_backend: str = "sounddevice"
+    playback_latency_ms: int | None = None
+    playback_process_time_ms: int | None = None
     playback_tail_guard_ms: int = 0
     sample_rate: int = 16000
     frame_duration_ms: int = 20
@@ -231,6 +233,10 @@ def load_config(config_path: Path) -> AppConfig:
                 playback_backend=audio.get(
                     "playback_backend",
                     "sounddevice",
+                ),
+                playback_latency_ms=audio.get("playback_latency_ms"),
+                playback_process_time_ms=audio.get(
+                    "playback_process_time_ms"
                 ),
                 playback_tail_guard_ms=audio.get(
                     "playback_tail_guard_ms",

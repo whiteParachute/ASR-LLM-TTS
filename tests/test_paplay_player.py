@@ -77,6 +77,8 @@ class PaplayAudioPlayerTest(unittest.TestCase):
         player = PaplayAudioPlayer(
             pulse_server="unix:/test/PulseServer",
             process_factory=process_factory,
+            stream_latency_ms=40,
+            stream_process_time_ms=20,
             stream_tail_guard_ms=300,
             clock=clock.monotonic,
             sleeper=clock.sleep,
@@ -97,6 +99,8 @@ class PaplayAudioPlayerTest(unittest.TestCase):
                 "--format=s16le",
                 "--rate=24000",
                 "--channels=1",
+                "--latency-msec=40",
+                "--process-time-msec=20",
             ],
         )
         self.assertEqual(
@@ -118,6 +122,17 @@ class PaplayAudioPlayerTest(unittest.TestCase):
     def test_rejects_negative_stream_tail_guard(self) -> None:
         with self.assertRaisesRegex(ValueError, "cannot be negative"):
             PaplayAudioPlayer(stream_tail_guard_ms=-1)
+
+    def test_rejects_nonpositive_stream_latency(self) -> None:
+        with self.assertRaisesRegex(ValueError, "latency must be positive"):
+            PaplayAudioPlayer(stream_latency_ms=0)
+
+    def test_rejects_nonpositive_stream_process_time(self) -> None:
+        with self.assertRaisesRegex(
+            ValueError,
+            "process time must be positive",
+        ):
+            PaplayAudioPlayer(stream_process_time_ms=0)
 
     def test_rejects_stream_format_changes(self) -> None:
         process = FakeStreamProcess()

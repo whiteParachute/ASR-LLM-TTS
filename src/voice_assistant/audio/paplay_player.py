@@ -40,15 +40,26 @@ class PaplayAudioPlayer:
         pulse_server: str | None = None,
         command_runner: CommandRunner | None = None,
         process_factory: ProcessFactory | None = None,
+        stream_latency_ms: int | None = None,
+        stream_process_time_ms: int | None = None,
         stream_tail_guard_ms: int = 0,
         clock: Clock = time.monotonic,
         sleeper: Sleeper = time.sleep,
     ) -> None:
+        if stream_latency_ms is not None and stream_latency_ms <= 0:
+            raise ValueError("Stream latency must be positive")
+        if (
+            stream_process_time_ms is not None
+            and stream_process_time_ms <= 0
+        ):
+            raise ValueError("Stream process time must be positive")
         if stream_tail_guard_ms < 0:
             raise ValueError("Stream tail guard cannot be negative")
         self._pulse_server = pulse_server
         self._command_runner = command_runner or subprocess.run
         self._process_factory = process_factory or subprocess.Popen
+        self._stream_latency_ms = stream_latency_ms
+        self._stream_process_time_ms = stream_process_time_ms
         self._stream_tail_guard_seconds = stream_tail_guard_ms / 1000
         self._clock = clock
         self._sleeper = sleeper
@@ -81,6 +92,12 @@ class PaplayAudioPlayer:
             f"--rate={first_chunk.sample_rate}",
             f"--channels={first_chunk.channels}",
         ]
+        if self._stream_latency_ms is not None:
+            command.append(f"--latency-msec={self._stream_latency_ms}")
+        if self._stream_process_time_ms is not None:
+            command.append(
+                f"--process-time-msec={self._stream_process_time_ms}"
+            )
         process = self._process_factory(
             command,
             stdin=subprocess.PIPE,
