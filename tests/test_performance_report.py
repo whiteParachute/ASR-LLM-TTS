@@ -69,6 +69,24 @@ class PerformanceReportTest(unittest.TestCase):
             500,
         )
 
+    def test_derives_first_tts_chunk_for_streaming_llm_session(self) -> None:
+        streaming_events = [
+            event("streaming", None, "model_load", 18000),
+            event("streaming", "turn_0001", "asr", 200),
+            event("streaming", "turn_0001", "llm_first_text", 100),
+            event("streaming", "turn_0001", "llm_first_segment", 300),
+            event("streaming", "turn_0001", "llm_stream", 500),
+            event("streaming", "turn_0001", "time_to_first_audio", 900),
+            event("streaming", "turn_0001", "turn_total", 1400),
+        ]
+
+        report = build_report(streaming_events)
+
+        self.assertEqual(report.stages["llm_first_text"].median_ms, 100)
+        self.assertEqual(report.stages["llm_first_segment"].median_ms, 300)
+        self.assertEqual(report.stages["llm_stream"].median_ms, 500)
+        self.assertEqual(report.stages["tts_first_chunk"].median_ms, 400)
+
     def test_rejects_session_without_successful_turns(self) -> None:
         with self.assertRaisesRegex(ValueError, "no successful"):
             build_report(

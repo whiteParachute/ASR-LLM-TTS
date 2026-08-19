@@ -67,6 +67,8 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(config.audio.end_silence_ms, 800)
         self.assertEqual(config.runtime.output_dir, Path("output"))
         self.assertEqual(config.runtime.reply_chunk_max_chars, 18)
+        self.assertFalse(config.runtime.stream_llm_to_tts)
+        self.assertEqual(config.runtime.first_reply_chunk_chars, 6)
         self.assertTrue(config.observability.enabled)
         self.assertTrue(config.observability.console)
         self.assertTrue(config.observability.jsonl)
@@ -108,6 +110,8 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(config.audio.start_trigger_ms, 200)
         self.assertEqual(config.audio.end_silence_ms, 500)
         self.assertIn("不超过15个汉字", config.llm.reply_instruction)
+        self.assertTrue(config.runtime.stream_llm_to_tts)
+        self.assertEqual(config.runtime.first_reply_chunk_chars, 6)
 
     def test_loads_cosyvoice3_experimental_config(self) -> None:
         config = load_config(
@@ -145,6 +149,8 @@ class ConfigTest(unittest.TestCase):
             config.observability.log_dir,
             Path("logs/wsl-cosyvoice3"),
         )
+        self.assertTrue(config.runtime.stream_llm_to_tts)
+        self.assertEqual(config.runtime.first_reply_chunk_chars, 6)
 
 if  __name__ == "__main__":
     unittest.main()

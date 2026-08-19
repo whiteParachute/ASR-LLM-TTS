@@ -1,3 +1,4 @@
+from itertools import chain
 from pathlib import Path
 from typing import Iterator
 
@@ -34,6 +35,15 @@ class VoicePipeline:
         self._performance = performance
 
     def prepare(self, audio_path: Path) -> PreparedResponse:
+        transcript = self.transcribe(audio_path)
+        reply = self.generate_reply(transcript)
+
+        return PreparedResponse(
+            transcript=transcript,
+            reply=reply,
+        )
+
+    def transcribe(self, audio_path: Path) -> str:
         input_audio_duration = wav_duration_ms(audio_path)
         with measure_stage(
             self._performance,
@@ -46,14 +56,10 @@ class VoicePipeline:
                 raise ValueError("ASR returned an empty transcript.")
             asr_span.add_fields(output_chars=len(transcript))
 
-        user_content = transcript
-        if self._reply_instructions:
-            user_content = f"{transcript}\n\n{self._reply_instructions}"
+        return transcript
 
-        messages = [
-            Message(role="system", content=self._system_prompt),
-            Message(role="user", content=user_content),
-        ]
+    def generate_reply(self, transcript: str) -> str:
+        messages = self._build_messages(transcript)
         with measure_stage(
             self._performance,
             "llm",
@@ -65,10 +71,49 @@ class VoicePipeline:
                 raise ValueError("LLM returned an empty reply.")
             llm_span.add_fields(output_chars=len(reply))
 
-        return PreparedResponse(
-            transcript=transcript,
-            reply=reply,
-        )
+        return reply
+
+    @property
+    def supports_streaming_llm(self) -> bool:
+        return callable(getattr(self._llm, "stream_generate", None))
+
+    def stream_reply(self, transcript: str) -> Iterator[str]:
+        stream_generate = getattr(self._llm, "stream_generate", None)
+        if not callable(stream_generate):
+            raise RuntimeError("Configured LLM provider does not stream text")
+
+        messages = self._build_messages(transcript)
+        with measure_stage(
+            self._performance,
+            "llm_stream",
+            input_chars=sum(len(message.content) for message in messages),
+        ) as llm_span:
+            iterator = iter(stream_generate(messages))
+            try:
+                with measure_stage(self._performance, "llm_first_text"):
+                    first_part = next(iterator)
+            except StopIteration as exc:
+                raise RuntimeError("LLM returned an empty reply.") from exc
+
+            output_chars = 0
+            for part in chain((first_part,), iterator):
+                output_chars += len(part)
+                yield part
+            llm_span.add_fields(output_chars=output_chars)
+
+    def _build_messages(self, transcript: str) -> list[Message]:
+        cleaned_transcript = transcript.strip()
+        if not cleaned_transcript:
+            raise ValueError("Transcript cannot be empty.")
+
+        user_content = cleaned_transcript
+        if self._reply_instructions:
+            user_content = f"{transcript}\n\n{self._reply_instructions}"
+
+        return [
+            Message(role="system", content=self._system_prompt),
+            Message(role="user", content=user_content),
+        ]
 
     def synthesize(
         self,

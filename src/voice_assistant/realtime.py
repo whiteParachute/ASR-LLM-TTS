@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import queue
 import time
 import wave
 from collections.abc import Callable
@@ -10,6 +11,7 @@ from contextvars import copy_context
 from dataclasses import dataclass
 from itertools import chain
 from pathlib import Path
+from threading import Thread
 from typing import Iterator, Protocol
 
 from voice_assistant.audio import (
@@ -33,7 +35,10 @@ from voice_assistant.observability import (
     measure_stage,
     wav_duration_ms,
 )
-from voice_assistant.text_chunking import split_reply_text
+from voice_assistant.text_chunking import (
+    split_reply_text,
+    stream_reply_text,
+)
 
 
 class TurnPipeline(Protocol):
@@ -57,6 +62,16 @@ class TurnPipeline(Protocol):
     def stream_synthesize(self, text: str) -> Iterator[AudioChunk]:
         ...
 
+    @property
+    def supports_streaming_llm(self) -> bool:
+        ...
+
+    def transcribe(self, audio_path: Path) -> str:
+        ...
+
+    def stream_reply(self, transcript: str) -> Iterator[str]:
+        ...
+
 
 ResultObserver = Callable[[PreparedResponse], None]
 
@@ -65,6 +80,17 @@ ResultObserver = Callable[[PreparedResponse], None]
 class _AudioStreamStats:
     chunk_count: int = 0
     duration_ms: float = 0.0
+
+
+_TEXT_STREAM_END = object()
+
+
+@dataclass(slots=True)
+class _TextStreamState:
+    queue: queue.Queue[object]
+    raw_parts: list[str]
+    segments: list[str]
+    thread: Thread
 
 
 class RealtimeVoiceAssistant:
@@ -78,17 +104,28 @@ class RealtimeVoiceAssistant:
         output_dir: Path,
         output_format: str = "wav",
         reply_chunk_max_chars: int = 18,
+        stream_llm_to_tts: bool = False,
+        first_reply_chunk_chars: int = 6,
         result_observer: ResultObserver | None = None,
         performance: PerformanceLogger | None = None,
     ) -> None:
         if reply_chunk_max_chars < 1:
             raise ValueError("reply_chunk_max_chars must be at least 1.")
+        if first_reply_chunk_chars < 1:
+            raise ValueError("first_reply_chunk_chars must be at least 1.")
+        if first_reply_chunk_chars > reply_chunk_max_chars:
+            raise ValueError(
+                "first_reply_chunk_chars cannot exceed "
+                "reply_chunk_max_chars."
+            )
         self._pipeline = pipeline
         self._recorder = recorder
         self._player = player
         self._output_dir = output_dir
         self._output_format = output_format.lstrip(".")
         self._reply_chunk_max_chars = reply_chunk_max_chars
+        self._stream_llm_to_tts = stream_llm_to_tts
+        self._first_reply_chunk_chars = first_reply_chunk_chars
         self._result_observer = result_observer
         self._performance = performance
         self._turn_number = 0
@@ -129,6 +166,18 @@ class RealtimeVoiceAssistant:
                 "turn_total",
                 audio_duration_ms=input_audio_duration,
             ) as turn_span:
+                if self._can_stream_text_and_audio():
+                    result = self._run_streaming_text_audio_turn(
+                        recorded_path=recorded_path,
+                        reply_path=reply_path,
+                    )
+                    turn_span.add_fields(
+                        reply_chunks=len(result.audio_paths),
+                        streaming_audio=True,
+                        streaming_text=True,
+                    )
+                    return result
+
                 if self._can_stream_audio():
                     result = self._run_streaming_turn(
                         recorded_path=recorded_path,
@@ -149,6 +198,149 @@ class RealtimeVoiceAssistant:
                     streaming_audio=False,
                 )
                 return result
+
+    def _run_streaming_text_audio_turn(
+        self,
+        *,
+        recorded_path: Path,
+        reply_path: Path,
+    ) -> PipelineResult:
+        state: _TextStreamState | None = None
+        try:
+            with measure_stage(
+                self._performance,
+                "time_to_first_audio",
+                streaming_audio=True,
+                streaming_text=True,
+            ) as first_audio_span:
+                transcript = self._pipeline.transcribe(recorded_path)
+                state = self._start_text_stream(transcript)
+                audio_chunks = self._stream_text_audio(state)
+                try:
+                    first_chunk = next(audio_chunks)
+                except StopIteration as exc:
+                    raise RuntimeError(
+                        "Streaming LLM/TTS returned no audio chunks"
+                    ) from exc
+                first_audio_span.add_fields(
+                    first_chunk_duration_ms=round(
+                        first_chunk.duration_ms,
+                        3,
+                    ),
+                    first_text_chars=len(state.segments[0]),
+                    sample_rate=first_chunk.sample_rate,
+                )
+
+            stats = _AudioStreamStats()
+            recorded_chunks = _record_audio_stream(
+                chunks=chain((first_chunk,), audio_chunks),
+                output_path=reply_path,
+                stats=stats,
+            )
+            play_stream = getattr(self._player, "play_stream")
+            with measure_stage(
+                self._performance,
+                "playback_stream",
+                streaming_audio=True,
+                streaming_text=True,
+            ) as playback_span:
+                play_stream(recorded_chunks)
+                playback_span.add_fields(
+                    chunk_count=stats.chunk_count,
+                    audio_duration_ms=round(stats.duration_ms, 3),
+                )
+        finally:
+            if state is not None:
+                state.thread.join()
+
+        if state is None:
+            raise RuntimeError("Streaming text state was not initialized")
+        reply = "".join(state.raw_parts).strip()
+        if not reply:
+            raise RuntimeError("Streaming LLM returned an empty reply")
+        prepared = PreparedResponse(transcript=transcript, reply=reply)
+        if self._result_observer is not None:
+            self._result_observer(prepared)
+
+        return PipelineResult(
+            transcript=transcript,
+            reply=reply,
+            audio_path=reply_path,
+            audio_paths=(reply_path,),
+        )
+
+    def _start_text_stream(self, transcript: str) -> _TextStreamState:
+        text_queue: queue.Queue[object] = queue.Queue()
+        raw_parts: list[str] = []
+        segments: list[str] = []
+
+        def capture_parts() -> Iterator[str]:
+            for part in self._pipeline.stream_reply(transcript):
+                raw_parts.append(part)
+                yield part
+
+        def produce() -> None:
+            try:
+                segment_iterator = iter(
+                    stream_reply_text(
+                        capture_parts(),
+                        first_chunk_chars=self._first_reply_chunk_chars,
+                        max_chars=self._reply_chunk_max_chars,
+                    )
+                )
+                with measure_stage(
+                    self._performance,
+                    "llm_first_segment",
+                    target_chars=self._first_reply_chunk_chars,
+                ) as first_segment_span:
+                    try:
+                        first_segment = next(segment_iterator)
+                    except StopIteration as exc:
+                        raise RuntimeError(
+                            "Streaming LLM returned an empty reply"
+                        ) from exc
+                    first_segment_span.add_fields(
+                        output_chars=len(first_segment),
+                    )
+                segments.append(first_segment)
+                text_queue.put(first_segment)
+                for segment in segment_iterator:
+                    segments.append(segment)
+                    text_queue.put(segment)
+            except BaseException as exc:
+                text_queue.put(exc)
+            finally:
+                text_queue.put(_TEXT_STREAM_END)
+
+        context = copy_context()
+        producer = Thread(
+            target=context.run,
+            args=(produce,),
+            name="llm-text-segments",
+            daemon=True,
+        )
+        state = _TextStreamState(
+            queue=text_queue,
+            raw_parts=raw_parts,
+            segments=segments,
+            thread=producer,
+        )
+        producer.start()
+        return state
+
+    def _stream_text_audio(
+        self,
+        state: _TextStreamState,
+    ) -> Iterator[AudioChunk]:
+        while True:
+            item = state.queue.get()
+            if item is _TEXT_STREAM_END:
+                return
+            if isinstance(item, BaseException):
+                raise item
+            if not isinstance(item, str):
+                raise RuntimeError("Streaming LLM returned invalid text")
+            yield from self._pipeline.stream_synthesize(item)
 
     def _run_chunked_turn(
         self,
@@ -266,6 +458,13 @@ class RealtimeVoiceAssistant:
             getattr(self._pipeline, "supports_streaming_tts", False)
         ) and callable(getattr(self._player, "play_stream", None))
 
+    def _can_stream_text_and_audio(self) -> bool:
+        return (
+            self._stream_llm_to_tts
+            and bool(getattr(self._pipeline, "supports_streaming_llm", False))
+            and self._can_stream_audio()
+        )
+
     def _play_with_prefetch(
         self,
         *,
@@ -377,6 +576,8 @@ def build_realtime_assistant(config: AppConfig) -> RealtimeVoiceAssistant:
         output_dir=config.runtime.output_dir / "turns",
         output_format=config.tts.output_format,
         reply_chunk_max_chars=config.runtime.reply_chunk_max_chars,
+        stream_llm_to_tts=config.runtime.stream_llm_to_tts,
+        first_reply_chunk_chars=config.runtime.first_reply_chunk_chars,
         result_observer=_print_result,
         performance=performance,
     )

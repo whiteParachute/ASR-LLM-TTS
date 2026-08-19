@@ -254,6 +254,8 @@ def _format_console_event(event: dict[str, Any]) -> str:
         "chunk_count",
         "sample_rate",
         "streaming_audio",
+        "streaming_text",
+        "target_chars",
         "error_type",
     ):
         if key in event:

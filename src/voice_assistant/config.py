@@ -70,6 +70,8 @@ class TTSConfig:
 class RuntimeConfig:
     output_dir: Path
     reply_chunk_max_chars: int = 18
+    stream_llm_to_tts: bool = False
+    first_reply_chunk_chars: int = 6
 
 
 @dataclass(frozen=True, slots=True)
@@ -227,6 +229,14 @@ def load_config(config_path: Path) -> AppConfig:
                 reply_chunk_max_chars=runtime.get(
                     "reply_chunk_max_chars",
                     18,
+                ),
+                stream_llm_to_tts=runtime.get(
+                    "stream_llm_to_tts",
+                    False,
+                ),
+                first_reply_chunk_chars=runtime.get(
+                    "first_reply_chunk_chars",
+                    6,
                 ),
             ),
             audio=AudioConfig(

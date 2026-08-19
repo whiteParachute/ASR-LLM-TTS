@@ -139,6 +139,25 @@ class FakeStreamingPipeline(FakePipeline):
         yield AudioChunk(b"\x03\x00\x04\x00", sample_rate=24000)
 
 
+class FakeTextAudioStreamingPipeline(FakeStreamingPipeline):
+    @property
+    def supports_streaming_llm(self) -> bool:
+        return True
+
+    def transcribe(self, audio_path: Path) -> str:
+        self.audio_path = audio_path
+        return "你好"
+
+    def stream_reply(self, transcript: str):
+        if transcript != "你好":
+            raise ValueError("unexpected transcript")
+        yield from ["我是", "你的", "贴心", "中文", "语音", "助手。"]
+
+    def stream_synthesize(self, text: str):
+        self.synthesized_texts.append(text)
+        yield from super().stream_synthesize(text)
+
+
 class FakeStreamingPlayer(FakePlayer):
     def __init__(self) -> None:
         super().__init__()
@@ -149,6 +168,17 @@ class FakeStreamingPlayer(FakePlayer):
 
 
 class RealtimeVoiceAssistantTest(unittest.TestCase):
+    def test_rejects_first_text_chunk_larger_than_later_chunks(self) -> None:
+        with self.assertRaisesRegex(ValueError, "cannot exceed"):
+            RealtimeVoiceAssistant(
+                pipeline=FakePipeline(),
+                recorder=FakeRecorder(),
+                player=FakePlayer(),
+                output_dir=Path("turns"),
+                reply_chunk_max_chars=6,
+                first_reply_chunk_chars=7,
+            )
+
     def test_continues_after_recoverable_turn_error(self) -> None:
         assistant = RealtimeVoiceAssistant(
             pipeline=FakePipeline(),
@@ -268,6 +298,88 @@ class RealtimeVoiceAssistantTest(unittest.TestCase):
             )
             self.assertTrue(result.audio_path.is_file())
             self.assertEqual(result.audio_paths, (result.audio_path,))
+
+    def test_streams_llm_segments_into_tts_and_saves_complete_reply(
+        self,
+    ) -> None:
+        pipeline = FakeTextAudioStreamingPipeline()
+        player = FakeStreamingPlayer()
+        observed: list[PreparedResponse] = []
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir) / "turns"
+            assistant = RealtimeVoiceAssistant(
+                pipeline=pipeline,
+                recorder=FakeRecorder(),
+                player=player,
+                output_dir=output_dir,
+                stream_llm_to_tts=True,
+                first_reply_chunk_chars=6,
+                reply_chunk_max_chars=18,
+                result_observer=observed.append,
+            )
+
+            result = assistant.run_turn()
+
+            self.assertTrue(result.audio_path.is_file())
+
+        self.assertEqual(
+            pipeline.synthesized_texts,
+            ["我是你的贴心", "中文语音助手。"],
+        )
+        self.assertEqual(len(player.streamed_chunks), 4)
+        self.assertEqual(result.transcript, "你好")
+        self.assertEqual(result.reply, "我是你的贴心中文语音助手。")
+        self.assertEqual(
+            observed,
+            [PreparedResponse(transcript="你好", reply=result.reply)],
+        )
+
+    def test_preserves_turn_id_in_background_llm_thread(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            performance = PerformanceLogger(
+                enabled=True,
+                console=False,
+                jsonl=True,
+                log_dir=temp_path / "logs",
+                session_id="llm-thread-session",
+            )
+            assistant = RealtimeVoiceAssistant(
+                pipeline=FakeTextAudioStreamingPipeline(),
+                recorder=FakeRecorder(),
+                player=FakeStreamingPlayer(),
+                output_dir=temp_path / "turns",
+                stream_llm_to_tts=True,
+                performance=performance,
+            )
+
+            assistant.run_turn()
+            assistant.close()
+
+            events = [
+                json.loads(line)
+                for line in (temp_path / "logs" / "performance.jsonl")
+                .read_text(encoding="utf-8")
+                .splitlines()
+            ]
+
+        first_segment = next(
+            event
+            for event in events
+            if event["stage"] == "llm_first_segment"
+        )
+        first_audio = next(
+            event
+            for event in events
+            if event["stage"] == "time_to_first_audio"
+        )
+        turn_total = events[-1]
+        self.assertEqual(first_segment["turn_id"], "turn_0001")
+        self.assertEqual(first_segment["target_chars"], 6)
+        self.assertEqual(first_segment["output_chars"], 6)
+        self.assertTrue(first_audio["streaming_text"])
+        self.assertTrue(turn_total["streaming_text"])
 
     def test_records_realtime_stage_sequence_with_one_turn_id(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

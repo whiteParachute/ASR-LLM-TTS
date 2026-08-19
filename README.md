@@ -90,6 +90,13 @@ one reply WAV for debugging. Non-streaming TTS providers retain the
 punctuation-based fallback controlled by
 `runtime.reply_chunk_max_chars`.
 
+The two WSL profiles also feed Qwen3.5 text into CosyVoice while the LLM
+is still generating. The first TTS request starts after roughly
+`runtime.first_reply_chunk_chars` characters (or an earlier sentence
+boundary); later segments use `runtime.reply_chunk_max_chars`. Set
+`runtime.stream_llm_to_tts: false` to retain the complete-reply path for
+an A/B comparison.
+
 Run the test suite with:
 
 ```bash
@@ -134,9 +141,10 @@ successful turn to focus on warmed latency:
 ./scripts/report_wsl_performance.sh --warmed-only
 ```
 
-The derived `tts_first_chunk` row is
-`time_to_first_audio - response_prepare`, which isolates the wait between
-the completed ASR/LLM preparation and the first playable TTS chunk.
+The derived `tts_first_chunk` row isolates the wait for the first playable
+TTS audio. On the complete-reply path it is
+`time_to_first_audio - response_prepare`; on the streaming-LLM path it is
+`time_to_first_audio - asr - llm_first_segment`.
 
 Measure the warmed TTS worker without microphone, ASR, LLM, playback, or
 WAV-writing overhead:

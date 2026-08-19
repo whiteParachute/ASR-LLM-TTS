@@ -29,6 +29,16 @@ class FakeLLM:
         return self.reply
 
 
+class FakeStreamingLLM(FakeLLM):
+    def __init__(self, parts: list[str]) -> None:
+        super().__init__(reply="".join(parts))
+        self.parts = parts
+
+    def stream_generate(self, messages: Sequence[Message]):
+        self.received_messages = list(messages)
+        yield from self.parts
+
+
 class FakeTTS:
     def __init__(self) -> None:
         self.received_text = ""
@@ -129,6 +139,31 @@ class VoicePipelineTest(unittest.TestCase):
         self.assertTrue(pipeline.supports_streaming_tts)
         self.assertEqual(len(chunks), 2)
         self.assertEqual(tts.received_text, "流式回答")
+
+    def test_transcribes_then_streams_llm_text(self) -> None:
+        asr = FakeASR(transcript=" 你好 ")
+        llm = FakeStreamingLLM(["我是", "语音", "助手。"])
+        pipeline = VoicePipeline(
+            asr=asr,
+            llm=llm,
+            tts=FakeTTS(),
+            system_prompt="测试助手",
+            reply_instructions="简短回答。",
+        )
+
+        transcript = pipeline.transcribe(Path("question.wav"))
+        parts = list(pipeline.stream_reply(transcript))
+
+        self.assertTrue(pipeline.supports_streaming_llm)
+        self.assertEqual(transcript, "你好")
+        self.assertEqual(parts, ["我是", "语音", "助手。"])
+        self.assertEqual(
+            llm.received_messages,
+            [
+                Message(role="system", content="测试助手"),
+                Message(role="user", content="你好\n\n简短回答。"),
+            ],
+        )
 
     def test_stops_when_asr_returns_empty_text(self) -> None:
         # Arrange

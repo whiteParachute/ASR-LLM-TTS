@@ -23,11 +23,13 @@ reintroducing playback echo.
 
 Planned increments:
 
-1. Add a repeatable end-to-end latency report over the structured session log.
-2. Separate cold-start, first-turn, and warmed-turn measurements.
+1. ✅ Add a repeatable end-to-end latency report over the structured session
+   log.
+2. ✅ Separate cold-start, first-turn, and warmed-turn measurements.
 3. Warm the useful ASR/LLM/TTS paths only when the startup trade-off is clear.
-4. Stream LLM output into sentence-sized TTS work instead of waiting for the
-   complete reply.
+4. 🟡 Stream LLM output into short TTS work instead of waiting for the
+   complete reply. The code is ready; Windows latency/naturalness validation
+   is pending.
 5. Re-evaluate quantization and inference backends only after stage timings
    show they are the bottleneck.
 

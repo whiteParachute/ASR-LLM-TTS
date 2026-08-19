@@ -12,6 +12,9 @@ from typing import Any, Sequence
 REPORTED_STAGES = (
     "asr",
     "llm",
+    "llm_first_text",
+    "llm_first_segment",
+    "llm_stream",
     "response_prepare",
     "tts_first_chunk",
     "time_to_first_audio",
@@ -107,6 +110,11 @@ def build_report(
         turn_stages = per_turn.get(turn_id, {})
         first_audio = turn_stages.get("time_to_first_audio")
         preparation = turn_stages.get("response_prepare")
+        if preparation is None:
+            asr = turn_stages.get("asr")
+            first_segment = turn_stages.get("llm_first_segment")
+            if asr is not None and first_segment is not None:
+                preparation = asr + first_segment
         if first_audio is not None and preparation is not None:
             durations["tts_first_chunk"].append(
                 max(first_audio - preparation, 0.0)
