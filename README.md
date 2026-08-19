@@ -5,7 +5,7 @@ The current modular runtime is a fully local, half-duplex voice loop:
 ```text
 Windows microphone -> WebRTC VAD -> Qwen3-ASR-0.6B-hf
                    -> Qwen3.5-4B (NF4 4-bit, non-thinking)
-                   -> Fun-CosyVoice3-0.5B -> Windows speakers
+                   -> CosyVoice-300M-SFT (中文女) -> Windows speakers
 ```
 
 The tested WSL2 stack uses Python 3.11, PyTorch 2.11 with CUDA 12.8,
@@ -39,25 +39,23 @@ The WSL configuration expects these local directories:
 ```text
 models/Qwen3-ASR-0.6B-hf
 models/Qwen3.5-4B
-models/Fun-CosyVoice3-0.5B-2512
+models/CosyVoice-300M-SFT
 ```
 
-CosyVoice3 clones a reference voice. The WSL profile defaults to the
-official Chinese CosyVoice sample installed at
-`.runtime/CosyVoice/asset/zero_shot_prompt.wav`, which keeps the reference
-language aligned with Chinese replies. To use a custom authorized voice,
-prepare its WAV and exact transcript as described in `voices/README.md`.
-The public Qwen sample used by the baseline profile can be downloaded with:
+The stable WSL profile uses CosyVoice's fixed `中文女` SFT speaker, selected
+after same-machine listening and latency tests. The newer CosyVoice3
+zero-shot model remains available in
+`configs/wsl_cuda_cosyvoice3.yaml` for authorized reference-voice
+experiments. Download it separately with:
 
 ```bash
-mkdir -p voices
-curl --fail --location \
-  --output voices/reference.wav \
-  https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen3-TTS-Repo/clone.wav
+source .venv/bin/activate
+python scripts/download_wsl_models.py cosyvoice3
 ```
 
-The TTS model and its precomputed reference-voice prompt run in one
-persistent worker; they are not reloaded for each conversation turn.
+The TTS model and selected speaker state run in one persistent worker;
+neither is reloaded for each conversation turn. Zero-shot profiles also
+cache their reference-voice prompt during worker startup.
 The official CosyVoice runtime is pinned under `.runtime/CosyVoice` by
 the installer instead of using the older CosyVoice 1 source retained
 from the upstream project.
@@ -73,21 +71,19 @@ after 500 ms of silence, processes the turn, plays the reply through
 WSLg PulseAudio, and then listens for the next turn. Press `Ctrl+C` to
 stop.
 
-For an A/B comparison with the original fixed `中文女` SFT voice, first
-download its model and launch the separate profile:
+For an A/B comparison with the newer zero-shot CosyVoice3 model, launch
+the separate profile after downloading it:
 
 ```bash
-source .venv/bin/activate
-python scripts/download_wsl_models.py cosyvoice_sft
-deactivate
-./scripts/run_wsl_realtime.sh --config configs/wsl_cuda_sft.yaml
+./scripts/run_wsl_realtime.sh \
+  --config configs/wsl_cuda_cosyvoice3.yaml
 ```
 
 This profile keeps the same ASR, LLM, VAD, and low-latency WSLg playback
-settings. It writes recordings to `output/wsl-sft/` and performance logs
-to `logs/wsl-sft/`, leaving the CosyVoice3 profile unchanged.
+settings. It writes recordings to `output/wsl-cosyvoice3/` and performance
+logs to `logs/wsl-cosyvoice3/`, leaving the stable SFT profile unchanged.
 
-CosyVoice3 returns PCM audio chunks as they are generated. One
+The CosyVoice worker returns PCM audio chunks as they are generated. One
 persistent `paplay --raw` process receives those chunks and plays them
 without waiting for a complete WAV. The same chunks are also written to
 one reply WAV for debugging. Non-streaming TTS providers retain the
@@ -147,22 +143,18 @@ For a reference-voice A/B test, override the WAV and its exact transcript
 without changing the realtime configuration:
 
 ```bash
-./scripts/benchmark_wsl_tts.sh --runs 5 \
+./scripts/benchmark_wsl_tts.sh \
+  --config configs/wsl_cuda_cosyvoice3.yaml \
+  --runs 5 \
   --reference-audio .runtime/CosyVoice/asset/zero_shot_prompt.wav \
   --reference-text '希望你以后能够做的比我还好呦。'
 ```
 
-Download and benchmark the original fixed Chinese SFT voice with the same
-sentence and measurement code:
+Benchmark the stable fixed Chinese SFT voice with the same sentence and
+measurement code:
 
 ```bash
-source .venv/bin/activate
-python scripts/download_wsl_models.py cosyvoice_sft
-./scripts/benchmark_wsl_tts.sh --runs 5 \
-  --model models/CosyVoice-300M-SFT \
-  --inference-mode sft \
-  --speaker 中文女 \
-  --load-jit
+./scripts/benchmark_wsl_tts.sh --runs 5
 ```
 
 Observability settings can be changed under `observability` in the YAML

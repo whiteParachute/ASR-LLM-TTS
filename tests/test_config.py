@@ -72,7 +72,7 @@ class ConfigTest(unittest.TestCase):
         self.assertTrue(config.observability.jsonl)
         self.assertEqual(config.observability.log_dir, Path("logs"))
 
-    def test_loads_cosyvoice3_wsl_streaming_config(self) -> None:
+    def test_loads_cosyvoice_sft_default_wsl_config(self) -> None:
         config = load_config(
             PROJECT_ROOT / "configs" / "wsl_cuda.yaml"
         )
@@ -83,7 +83,7 @@ class ConfigTest(unittest.TestCase):
         )
         self.assertEqual(
             config.tts.model,
-            "models/Fun-CosyVoice3-0.5B-2512",
+            "models/CosyVoice-300M-SFT",
         )
         self.assertEqual(
             config.tts.worker_python,
@@ -93,18 +93,13 @@ class ConfigTest(unittest.TestCase):
             config.tts.runtime_dir,
             Path(".runtime/CosyVoice"),
         )
-        self.assertEqual(
-            config.tts.reference_audio,
-            Path(".runtime/CosyVoice/asset/zero_shot_prompt.wav"),
-        )
-        self.assertEqual(
-            config.tts.reference_text,
-            "希望你以后能够做的比我还好呦。",
-        )
+        self.assertEqual(config.tts.sample_rate, 22050)
+        self.assertIsNone(config.tts.reference_audio)
+        self.assertEqual(config.tts.reference_text, "")
         self.assertEqual(config.tts.dtype, "float16")
         self.assertEqual(config.tts.startup_timeout_seconds, 300)
-        self.assertEqual(config.tts.inference_mode, "zero_shot")
-        self.assertEqual(config.tts.speaker, "")
+        self.assertEqual(config.tts.inference_mode, "sft")
+        self.assertEqual(config.tts.speaker, "中文女")
         self.assertFalse(config.tts.load_jit)
         self.assertEqual(config.audio.playback_latency_ms, 40)
         self.assertEqual(config.audio.playback_process_time_ms, 20)
@@ -114,9 +109,9 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(config.audio.end_silence_ms, 500)
         self.assertIn("不超过15个汉字", config.llm.reply_instruction)
 
-    def test_loads_cosyvoice_sft_comparison_config(self) -> None:
+    def test_loads_cosyvoice3_experimental_config(self) -> None:
         config = load_config(
-            PROJECT_ROOT / "configs" / "wsl_cuda_sft.yaml"
+            PROJECT_ROOT / "configs" / "wsl_cuda_cosyvoice3.yaml"
         )
 
         self.assertEqual(
@@ -125,21 +120,30 @@ class ConfigTest(unittest.TestCase):
         )
         self.assertEqual(
             config.tts.model,
-            "models/CosyVoice-300M-SFT",
+            "models/Fun-CosyVoice3-0.5B-2512",
         )
-        self.assertEqual(config.tts.sample_rate, 22050)
-        self.assertEqual(config.tts.inference_mode, "sft")
-        self.assertEqual(config.tts.speaker, "中文女")
-        self.assertIsNone(config.tts.reference_audio)
-        self.assertEqual(config.tts.reference_text, "")
+        self.assertEqual(config.tts.sample_rate, 24000)
+        self.assertEqual(config.tts.inference_mode, "zero_shot")
+        self.assertEqual(config.tts.speaker, "")
+        self.assertEqual(
+            config.tts.reference_audio,
+            Path(".runtime/CosyVoice/asset/zero_shot_prompt.wav"),
+        )
+        self.assertEqual(
+            config.tts.reference_text,
+            "希望你以后能够做的比我还好呦。",
+        )
         self.assertFalse(config.tts.load_jit)
         self.assertEqual(config.audio.playback_latency_ms, 40)
         self.assertEqual(config.audio.playback_process_time_ms, 20)
         self.assertEqual(config.audio.playback_tail_guard_ms, 300)
-        self.assertEqual(config.runtime.output_dir, Path("output/wsl-sft"))
+        self.assertEqual(
+            config.runtime.output_dir,
+            Path("output/wsl-cosyvoice3"),
+        )
         self.assertEqual(
             config.observability.log_dir,
-            Path("logs/wsl-sft"),
+            Path("logs/wsl-cosyvoice3"),
         )
 
 if  __name__ == "__main__":

@@ -24,21 +24,21 @@ llm:
 
 tts:
   provider: cosyvoice3_stream_worker
-  model: models/CosyVoice-300M-SFT
+  model: models/Fun-CosyVoice3-0.5B-2512
   language_code: Chinese
-  default_voice: 中文女
-  sample_rate: 22050
+  default_voice: reference
+  sample_rate: 24000
   output_format: wav
   device: cuda:0
   worker_python: .venv-cosyvoice/bin/python
   worker_script: scripts/cosyvoice3_stream_worker.py
   runtime_dir: .runtime/CosyVoice
+  reference_audio: .runtime/CosyVoice/asset/zero_shot_prompt.wav
+  reference_text: 希望你以后能够做的比我还好呦。
+  x_vector_only_mode: false
   dtype: float16
   startup_timeout_seconds: 300
   warmup_text: 你好，很高兴和你对话。
-  inference_mode: sft
-  speaker: 中文女
-  load_jit: false
 
 audio:
   playback_backend: paplay
@@ -55,11 +55,11 @@ audio:
   max_utterance_seconds: 30.0
 
 runtime:
-  output_dir: output/wsl-sft
+  output_dir: output/wsl-cosyvoice3
   reply_chunk_max_chars: 18
 
 observability:
   enabled: true
   console: true
   jsonl: true
-  log_dir: logs/wsl-sft
+  log_dir: logs/wsl-cosyvoice3

@@ -125,7 +125,7 @@ DOWNLOADS = {
     ),
 }
 
-DEFAULT_DOWNLOADS = ("qwen_asr_hf", "qwen", "cosyvoice3")
+DEFAULT_DOWNLOADS = ("qwen_asr_hf", "qwen", "cosyvoice_sft")
 
 
 def build_parser() -> argparse.ArgumentParser:

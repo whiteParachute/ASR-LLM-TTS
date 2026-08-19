@@ -41,7 +41,9 @@ class SequenceClock:
 class TTSBenchmarkTest(unittest.TestCase):
     def test_overrides_reference_audio_and_text_together(self) -> None:
         project_root = Path(__file__).resolve().parents[1]
-        config = load_config(project_root / "configs/wsl_cuda.yaml")
+        config = load_config(
+            project_root / "configs/wsl_cuda_cosyvoice3.yaml"
+        )
 
         overridden = override_reference_voice(
             config,
@@ -61,7 +63,9 @@ class TTSBenchmarkTest(unittest.TestCase):
 
     def test_requires_paired_reference_override(self) -> None:
         project_root = Path(__file__).resolve().parents[1]
-        config = load_config(project_root / "configs/wsl_cuda.yaml")
+        config = load_config(
+            project_root / "configs/wsl_cuda_cosyvoice3.yaml"
+        )
 
         with self.assertRaisesRegex(ValueError, "together"):
             override_reference_voice(

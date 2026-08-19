@@ -6,7 +6,9 @@ configuration. A 3–10 second clip with one speaker and little background
 noise is a good starting point.
 
 The baseline configuration contains the transcript of Qwen's public
-voice-clone example. The WSL profile instead uses the official Chinese
+voice-clone example. The stable WSL profile uses a fixed SFT voice and
+needs no reference recording. The experimental
+`configs/wsl_cuda_cosyvoice3.yaml` profile uses the official Chinese
 sample shipped with the pinned CosyVoice runtime. To try the baseline
 profile, download its matching reference clip without committing the WAV
 file:
