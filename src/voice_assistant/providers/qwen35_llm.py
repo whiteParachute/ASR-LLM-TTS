@@ -230,6 +230,20 @@ class Qwen35LLM:
             "max_new_tokens": self._max_new_tokens,
             "do_sample": self._do_sample,
         }
+        eos_token_id = getattr(
+            self._processor.tokenizer,
+            "eos_token_id",
+            None,
+        )
+        if eos_token_id is not None:
+            generation_kwargs["eos_token_id"] = eos_token_id
+        pad_token_id = getattr(
+            self._processor.tokenizer,
+            "pad_token_id",
+            None,
+        )
+        if pad_token_id is not None:
+            generation_kwargs["pad_token_id"] = pad_token_id
         if self._do_sample:
             generation_kwargs.update(
                 temperature=self._temperature,

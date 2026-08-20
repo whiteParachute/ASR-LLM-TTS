@@ -37,7 +37,7 @@ class FailingModel(FakeModel):
 
 class FakeProcessor:
     def __init__(self, decoded: str = " 模型回答 ") -> None:
-        self.tokenizer = object()
+        self.tokenizer = FakeTokenizer()
         self.batch = FakeBatch()
         self.decoded = decoded
         self.template_arguments: dict[str, Any] = {}
@@ -62,6 +62,11 @@ class FakeProcessor:
     ) -> str:
         self.received_decode_ids = token_ids
         return self.decoded
+
+
+class FakeTokenizer:
+    eos_token_id = 1001
+    pad_token_id = 1002
 
 
 class FakeTextIteratorStreamer:
@@ -120,6 +125,8 @@ class Qwen35LLMTest(unittest.TestCase):
         self.assertEqual(model.received_arguments["temperature"], 0.7)
         self.assertEqual(model.received_arguments["top_p"], 0.8)
         self.assertEqual(model.received_arguments["top_k"], 20)
+        self.assertEqual(model.received_arguments["eos_token_id"], 1001)
+        self.assertEqual(model.received_arguments["pad_token_id"], 1002)
         self.assertEqual(processor.received_decode_ids, [9, 10])
         self.assertEqual(reply, "模型回答")
 
