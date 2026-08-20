@@ -136,6 +136,12 @@ record the selected route, tool names, timings, round counts, direct-result
 status, and success status, but never tool arguments or returned content. Set
 `tools.enabled: false` to disable the tool layer completely.
 
+The planned expansion is tracked in `ROADMAP.md`: web search and safe page
+retrieval first, then a shared permission/confirmation layer, local knowledge
+and memory, sandboxed Python/Bash, Browser Use, and finally Computer Use. Shell,
+browser actions, and desktop control remain disabled until their required
+scope, confirmation, audit, and emergency-stop boundaries are implemented.
+
 ## Performance observability v1
 
 Each conversation turn now prints privacy-safe stage timings for
