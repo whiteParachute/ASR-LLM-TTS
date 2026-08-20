@@ -226,9 +226,10 @@ class Qwen35LLM:
         )
         model_inputs = model_inputs.to(self._model.device)
 
+        use_sampling = self._do_sample and not tools
         generation_kwargs: dict[str, Any] = {
             "max_new_tokens": self._max_new_tokens,
-            "do_sample": self._do_sample,
+            "do_sample": use_sampling,
         }
         eos_token_id = getattr(
             self._processor.tokenizer,
@@ -244,7 +245,7 @@ class Qwen35LLM:
         )
         if pad_token_id is not None:
             generation_kwargs["pad_token_id"] = pad_token_id
-        if self._do_sample:
+        if use_sampling:
             generation_kwargs.update(
                 temperature=self._temperature,
                 top_p=self._top_p,

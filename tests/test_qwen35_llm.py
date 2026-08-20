@@ -168,6 +168,7 @@ class Qwen35LLMTest(unittest.TestCase):
             processor.template_arguments["tools"],
             [tool.as_chat_template_dict()],
         )
+        self.assertFalse(provider._model.received_arguments["do_sample"])
 
     def test_renders_tool_call_and_result_in_followup_messages(self) -> None:
         processor = FakeProcessor(decoded="结果是5。")

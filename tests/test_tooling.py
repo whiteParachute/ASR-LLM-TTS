@@ -54,6 +54,10 @@ class ToolingTest(unittest.TestCase):
             json.loads(result.content)["result"]["value"],
             30,
         )
+        self.assertEqual(
+            json.loads(result.content)["result"]["answer"],
+            "30",
+        )
 
         unsafe = registry.execute(
             ToolCall(

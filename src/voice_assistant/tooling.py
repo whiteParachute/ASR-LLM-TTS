@@ -266,7 +266,10 @@ def build_builtin_tool_registry(
             name="calculate",
             description=(
                 "Evaluate a basic arithmetic expression accurately. "
-                "Supports +, -, *, /, //, %, **, and parentheses."
+                "Supports +, -, *, /, //, %, **, and parentheses. "
+                "The returned result.answer is authoritative: copy its "
+                "Arabic digits exactly into the final answer without "
+                "recalculating or converting them to Chinese numerals."
             ),
             parameters={
                 "type": "object",
@@ -330,7 +333,11 @@ def _calculate(arguments: dict[str, Any]) -> dict[str, Any]:
     value = _evaluate_arithmetic(tree.body)
     if isinstance(value, float) and value.is_integer():
         value = int(value)
-    return {"expression": expression, "value": value}
+    return {
+        "expression": expression,
+        "value": value,
+        "answer": str(value),
+    }
 
 
 def _evaluate_arithmetic(node: ast.AST) -> int | float:
