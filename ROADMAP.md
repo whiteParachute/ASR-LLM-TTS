@@ -47,10 +47,10 @@ Tool use should be a general capability rather than a web-search special case.
 
 Planned increments:
 
-1. Define a tool registry with JSON schemas, timeouts, result-size limits, and
-   a bounded LLM tool loop.
-2. Validate the loop first with deterministic local tools such as time and
-   calculator.
+1. ✅ Define a tool registry with JSON schemas, timeouts, result-size limits,
+   and a bounded native Qwen3.5 tool loop.
+2. ✅ Validate the loop with deterministic local time and calculator tools
+   on the Windows deployment.
 3. Add a configurable web-search adapter, preferring a self-hosted SearXNG
    endpoint or an explicitly configured search API.
 4. Add safe page retrieval, source metadata, spoken summaries, and a clear
