@@ -113,9 +113,11 @@ model weights under `models/`; both are ignored by Git.
 
 The WSL profiles enable Qwen3.5's native tool-call chat template. The first
 built-in tools are `get_current_time` and `calculate`; they provide a local,
-deterministic validation path before network search is added. Tool execution
-uses a strict registry with argument schemas, per-call timeouts, bounded
-result text, and a maximum number of model/tool rounds.
+deterministic validation path before network search is added. A conservative
+intent gate keeps tool schemas out of ordinary chat prompts and exposes only
+the matching built-in tool. Tool execution uses a strict registry with
+argument schemas, per-call timeouts, bounded result text, and a maximum number
+of model/tool rounds.
 
 Tool use can be configured without changing model code:
 
@@ -127,10 +129,12 @@ tools:
   max_result_chars: 2000
 ```
 
-When tools are enabled, the assistant waits for the final tool-backed text
-before starting TTS. Performance logs record tool names, timings, round counts,
-and success status, but never tool arguments or returned content. Set
-`tools.enabled: false` for the original direct-generation path.
+The deterministic time and calculator tools format their trusted result
+directly after a successful call, avoiding a second LLM generation. Tools that
+need model summarization still use the bounded follow-up loop. Performance logs
+record the selected route, tool names, timings, round counts, direct-result
+status, and success status, but never tool arguments or returned content. Set
+`tools.enabled: false` to disable the tool layer completely.
 
 ## Performance observability v1
 
@@ -150,6 +154,11 @@ Every event includes a `session_id`, `turn_id`, stage, status, and
 duration. ASR and TTS events also include audio duration and real-time
 factor when the audio is a readable WAV file. Transcript and reply text
 are deliberately excluded from performance logs.
+
+Streaming playback events also record `max_chunk_gap_ms`,
+`min_buffer_ahead_ms`, and `estimated_underflow_ms`. These fields distinguish
+audio already present in the generated WAV from glitches caused while live TTS
+generation and playback are running concurrently.
 
 Inspect the latest events after a test conversation with:
 

@@ -7,7 +7,11 @@ from unittest.mock import Mock, patch
 
 from voice_assistant.audio import MicrophoneStreamError
 from voice_assistant.contracts import AudioChunk, PreparedResponse
-from voice_assistant.realtime import RealtimeVoiceAssistant
+from voice_assistant.realtime import (
+    RealtimeVoiceAssistant,
+    _AudioStreamStats,
+    _record_audio_stream,
+)
 from voice_assistant.observability import PerformanceLogger, measure_stage
 
 
@@ -298,6 +302,35 @@ class RealtimeVoiceAssistantTest(unittest.TestCase):
             )
             self.assertTrue(result.audio_path.is_file())
             self.assertEqual(result.audio_paths, (result.audio_path,))
+
+    def test_measures_stream_buffer_deficit_between_audio_chunks(self) -> None:
+        half_second_pcm = b"\x00\x00" * 8000
+        chunks = iter(
+            [
+                AudioChunk(half_second_pcm, sample_rate=16000),
+                AudioChunk(half_second_pcm, sample_rate=16000),
+                AudioChunk(half_second_pcm, sample_rate=16000),
+            ]
+        )
+        clock_values = iter((0.0, 0.3, 1.4))
+        stats = _AudioStreamStats()
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            streamed = list(
+                _record_audio_stream(
+                    chunks=chunks,
+                    output_path=Path(temp_dir) / "stream.wav",
+                    stats=stats,
+                    clock=lambda: next(clock_values),
+                )
+            )
+
+        self.assertEqual(len(streamed), 3)
+        self.assertEqual(stats.chunk_count, 3)
+        self.assertAlmostEqual(stats.duration_ms, 1500)
+        self.assertAlmostEqual(stats.max_chunk_gap_ms, 1100)
+        self.assertAlmostEqual(stats.min_buffer_ahead_ms or 0, -400)
+        self.assertAlmostEqual(stats.estimated_underflow_ms, 400)
 
     def test_streams_llm_segments_into_tts_and_saves_complete_reply(
         self,

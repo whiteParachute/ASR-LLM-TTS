@@ -264,6 +264,11 @@ def _format_console_event(event: dict[str, Any]) -> str:
         "tool_ok",
         "tool_error_type",
         "call_index",
+        "route",
+        "direct_reply",
+        "max_chunk_gap_ms",
+        "min_buffer_ahead_ms",
+        "estimated_underflow_ms",
         "error_type",
     ):
         if key in event:

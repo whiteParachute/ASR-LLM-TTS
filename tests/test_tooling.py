@@ -21,13 +21,23 @@ from voice_assistant.observability import PerformanceLogger
 
 
 class FakeToolLLM:
-    def __init__(self, responses: list[ToolAwareResponse]) -> None:
+    def __init__(
+        self,
+        responses: list[ToolAwareResponse],
+        *,
+        plain_reply: str | None = None,
+    ) -> None:
         self.responses = responses
+        self.plain_reply = plain_reply
+        self.plain_conversations: list[list[Message]] = []
         self.conversations: list[list[Message]] = []
         self.tools: list[tuple[ToolDefinition, ...]] = []
 
     def generate(self, messages):
-        raise AssertionError("plain generation should not be used")
+        if self.plain_reply is None:
+            raise AssertionError("plain generation should not be used")
+        self.plain_conversations.append(list(messages))
+        return self.plain_reply
 
     def generate_with_tools(self, messages, tools):
         self.conversations.append(list(messages))
@@ -92,6 +102,45 @@ class ToolingTest(unittest.TestCase):
             payload["result"]["local_time"],
             "2026-08-20 22:30:00",
         )
+        self.assertEqual(
+            result.direct_reply,
+            "现在是2026年8月20日，星期四，22点30分。",
+        )
+
+        clock_only = registry.execute(
+            ToolCall(
+                name="get_current_time",
+                arguments={"timezone": "Asia/Shanghai"},
+            ),
+            reply_context="现在几点了",
+        )
+        self.assertEqual(clock_only.direct_reply, "现在是22点30分。")
+
+    def test_routes_only_tools_matching_explicit_intent(self) -> None:
+        registry = build_builtin_tool_registry(
+            timeout_seconds=1,
+            max_result_chars=500,
+        )
+
+        self.assertEqual(registry.definitions_for_text("你好"), ())
+        self.assertEqual(
+            [
+                definition.name
+                for definition in registry.definitions_for_text(
+                    "一二三加四等于多少"
+                )
+            ],
+            ["calculate"],
+        )
+        self.assertEqual(
+            [
+                definition.name
+                for definition in registry.definitions_for_text(
+                    "现在几点了"
+                )
+            ],
+            ["get_current_time"],
+        )
 
     def test_rejects_unknown_tool_and_invalid_arguments(self) -> None:
         registry = build_builtin_tool_registry(
@@ -134,7 +183,7 @@ class ToolingTest(unittest.TestCase):
         self.assertLessEqual(len(result.content), 128)
         self.assertTrue(payload["truncated"])
 
-    def test_runs_bounded_native_tool_conversation(self) -> None:
+    def test_returns_builtin_calculator_result_without_second_llm(self) -> None:
         registry = build_builtin_tool_registry(
             timeout_seconds=1,
             max_result_chars=500,
@@ -149,7 +198,6 @@ class ToolingTest(unittest.TestCase):
                         ),
                     )
                 ),
-                ToolAwareResponse(content="答案是42。"),
             ]
         )
         loop = BoundedToolLoop(llm, registry, max_rounds=2)
@@ -157,24 +205,73 @@ class ToolingTest(unittest.TestCase):
         reply = loop.generate([Message(role="user", content="6乘7是多少？")])
 
         self.assertEqual(reply, "答案是42。")
-        followup = llm.conversations[1]
-        self.assertEqual(followup[-2].role, "assistant")
-        self.assertEqual(followup[-1].role, "tool")
-        self.assertEqual(
-            json.loads(followup[-1].content)["result"]["value"],
-            42,
-        )
+        self.assertEqual(len(llm.conversations), 1)
+        self.assertEqual([tool.name for tool in llm.tools[0]], ["calculate"])
 
-    def test_stops_when_model_exceeds_tool_round_limit(self) -> None:
+    def test_plain_chat_bypasses_tool_prompt(self) -> None:
         registry = build_builtin_tool_registry(
             timeout_seconds=1,
             max_result_chars=500,
         )
+        llm = FakeToolLLM([], plain_reply="你好呀。")
+        loop = BoundedToolLoop(llm, registry, max_rounds=2)
+
+        reply = loop.generate([Message(role="user", content="你好")])
+
+        self.assertEqual(reply, "你好呀。")
+        self.assertEqual(len(llm.plain_conversations), 1)
+        self.assertEqual(llm.conversations, [])
+
+    def test_keeps_native_second_round_for_unformatted_tools(self) -> None:
+        registry = ToolRegistry(timeout_seconds=1, max_result_chars=500)
+        registry.register(
+            ToolDefinition(
+                name="lookup",
+                description="Look up a value.",
+                parameters={
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": False,
+                },
+            ),
+            lambda _: {"value": "found"},
+        )
+        llm = FakeToolLLM(
+            [
+                ToolAwareResponse(
+                    tool_calls=(ToolCall(name="lookup", arguments={}),)
+                ),
+                ToolAwareResponse(content="找到了。"),
+            ]
+        )
+        loop = BoundedToolLoop(llm, registry, max_rounds=2)
+
+        reply = loop.generate([Message(role="user", content="查一下")])
+
+        self.assertEqual(reply, "找到了。")
+        followup = llm.conversations[1]
+        self.assertEqual(followup[-2].role, "assistant")
+        self.assertEqual(followup[-1].role, "tool")
+
+    def test_stops_when_model_exceeds_tool_round_limit(self) -> None:
+        registry = ToolRegistry(timeout_seconds=1, max_result_chars=500)
+        registry.register(
+            ToolDefinition(
+                name="repeat_tool",
+                description="Always requests another round.",
+                parameters={
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": False,
+                },
+            ),
+            lambda _: {"ok": True},
+        )
         repeated_call = ToolAwareResponse(
             tool_calls=(
                 ToolCall(
-                    name="calculate",
-                    arguments={"expression": "1+1"},
+                    name="repeat_tool",
+                    arguments={},
                 ),
             )
         )
@@ -182,7 +279,7 @@ class ToolingTest(unittest.TestCase):
         loop = BoundedToolLoop(llm, registry, max_rounds=1)
 
         with self.assertRaisesRegex(ToolLoopError, "round limit"):
-            loop.generate([Message(role="user", content="计算")])
+            loop.generate([Message(role="user", content="继续")])
 
     def test_logs_tool_metadata_without_arguments_or_results(self) -> None:
         registry = build_builtin_tool_registry(
@@ -199,7 +296,6 @@ class ToolingTest(unittest.TestCase):
                         ),
                     )
                 ),
-                ToolAwareResponse(content="已计算。"),
             ]
         )
 
@@ -218,7 +314,9 @@ class ToolingTest(unittest.TestCase):
                 performance=performance,
             )
             with performance.turn("turn_0001"):
-                loop.generate([Message(role="user", content="计算")])
+                loop.generate(
+                    [Message(role="user", content="计算12345乘6789")]
+                )
             performance.close()
             log_text = (Path(temp_dir) / "performance.jsonl").read_text(
                 encoding="utf-8"

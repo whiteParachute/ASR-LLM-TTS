@@ -80,6 +80,9 @@ ResultObserver = Callable[[PreparedResponse], None]
 class _AudioStreamStats:
     chunk_count: int = 0
     duration_ms: float = 0.0
+    max_chunk_gap_ms: float = 0.0
+    min_buffer_ahead_ms: float | None = None
+    estimated_underflow_ms: float = 0.0
 
 
 _TEXT_STREAM_END = object()
@@ -248,6 +251,16 @@ class RealtimeVoiceAssistant:
                 playback_span.add_fields(
                     chunk_count=stats.chunk_count,
                     audio_duration_ms=round(stats.duration_ms, 3),
+                    max_chunk_gap_ms=round(stats.max_chunk_gap_ms, 3),
+                    min_buffer_ahead_ms=(
+                        round(stats.min_buffer_ahead_ms, 3)
+                        if stats.min_buffer_ahead_ms is not None
+                        else None
+                    ),
+                    estimated_underflow_ms=round(
+                        stats.estimated_underflow_ms,
+                        3,
+                    ),
                 )
         finally:
             if state is not None:
@@ -444,6 +457,16 @@ class RealtimeVoiceAssistant:
             playback_span.add_fields(
                 chunk_count=stats.chunk_count,
                 audio_duration_ms=round(stats.duration_ms, 3),
+                max_chunk_gap_ms=round(stats.max_chunk_gap_ms, 3),
+                min_buffer_ahead_ms=(
+                    round(stats.min_buffer_ahead_ms, 3)
+                    if stats.min_buffer_ahead_ms is not None
+                    else None
+                ),
+                estimated_underflow_ms=round(
+                    stats.estimated_underflow_ms,
+                    3,
+                ),
             )
 
         return PipelineResult(
@@ -625,13 +648,42 @@ def _record_audio_stream(
     chunks: Iterator[AudioChunk],
     output_path: Path,
     stats: _AudioStreamStats,
+    clock: Callable[[], float] = time.monotonic,
 ) -> Iterator[AudioChunk]:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     expected_sample_rate: int | None = None
     expected_channels: int | None = None
+    stream_started_at: float | None = None
+    previous_chunk_at: float | None = None
 
     with wave.open(str(output_path), "wb") as audio_file:
         for chunk in chunks:
+            chunk_arrived_at = clock()
+            if stream_started_at is None:
+                stream_started_at = chunk_arrived_at
+            else:
+                elapsed_ms = (
+                    chunk_arrived_at - stream_started_at
+                ) * 1000
+                buffer_ahead_ms = stats.duration_ms - elapsed_ms
+                if stats.min_buffer_ahead_ms is None:
+                    stats.min_buffer_ahead_ms = buffer_ahead_ms
+                else:
+                    stats.min_buffer_ahead_ms = min(
+                        stats.min_buffer_ahead_ms,
+                        buffer_ahead_ms,
+                    )
+                stats.estimated_underflow_ms = max(
+                    stats.estimated_underflow_ms,
+                    -buffer_ahead_ms,
+                )
+            if previous_chunk_at is not None:
+                stats.max_chunk_gap_ms = max(
+                    stats.max_chunk_gap_ms,
+                    (chunk_arrived_at - previous_chunk_at) * 1000,
+                )
+            previous_chunk_at = chunk_arrived_at
+
             if expected_sample_rate is None:
                 expected_sample_rate = chunk.sample_rate
                 expected_channels = chunk.channels

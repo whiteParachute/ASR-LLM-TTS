@@ -37,6 +37,9 @@ Planned increments:
    median TTS time to first audio improved from 1.424 to 1.229 seconds, but
    model loading increased from 13.7 to 23.2 seconds and the first two
    measured syntheses took 6.68 and 8.18 seconds.
+6. ✅ Record live TTS chunk gaps, minimum buffered audio, and estimated
+   underflow so intermittent playback noise can be separated from artifacts
+   already present in saved WAV output.
 
 Further latency work is paused until a backend can preserve full-sentence
 prosody and improve the end-to-end warmed median without startup regressions.
@@ -51,11 +54,14 @@ Planned increments:
    and a bounded native Qwen3.5 tool loop.
 2. ✅ Validate the loop with deterministic local time and calculator tools
    on the Windows deployment.
-3. Add a configurable web-search adapter, preferring a self-hosted SearXNG
+3. ✅ Gate built-in tools by explicit intent and return trusted deterministic
+   results without a second LLM round. Ordinary chat no longer carries tool
+   schemas.
+4. Add a configurable web-search adapter, preferring a self-hosted SearXNG
    endpoint or an explicitly configured search API.
-4. Add safe page retrieval, source metadata, spoken summaries, and a clear
+5. Add safe page retrieval, source metadata, spoken summaries, and a clear
    offline/error fallback.
-5. Keep network tools disabled unless enabled in configuration.
+6. Keep network tools disabled unless enabled in configuration.
 
 Acceptance requires answering a current-information question from retrieved
 results, retaining source URLs in logs/output, and never looping indefinitely.
