@@ -10,6 +10,7 @@ from voice_assistant.config import (
     RuntimeConfig,
     TTSConfig,
     ToolUseConfig,
+    WebSearchConfig,
 )
 
 
@@ -126,6 +127,8 @@ class BootstrapTest(unittest.TestCase):
         registry_mock.assert_called_once_with(
             timeout_seconds=1.5,
             max_result_chars=800,
+            web_search=None,
+            web_search_timeout_seconds=None,
         )
         loop_mock.assert_called_once_with(
             llm_mock.return_value,
@@ -134,6 +137,74 @@ class BootstrapTest(unittest.TestCase):
             performance=None,
         )
         self.assertIs(pipeline_mock.call_args.kwargs["tool_loop"], loop)
+
+    def test_builds_enabled_searxng_tool(self) -> None:
+        config = AppConfig(
+            asr=ASRConfig(provider="sensevoice", model="test-asr"),
+            llm=LLMConfig(
+                provider="qwen35_transformers",
+                model="test-llm",
+                max_new_tokens=128,
+                system_prompt="测试助手",
+            ),
+            tts=TTSConfig(provider="edge_tts", default_voice="test"),
+            runtime=RuntimeConfig(output_dir=Path("output")),
+            tools=ToolUseConfig(
+                enabled=True,
+                max_result_chars=6000,
+                web_search=WebSearchConfig(
+                    enabled=True,
+                    endpoint="https://search.example/searxng",
+                    timeout_seconds=5,
+                    max_results=4,
+                    max_response_bytes=500_000,
+                    language="zh-CN",
+                    safesearch=2,
+                ),
+            ),
+        )
+        web_provider = object()
+
+        with (
+            patch(
+                "voice_assistant.bootstrap.build_asr",
+                return_value=object(),
+            ),
+            patch(
+                "voice_assistant.bootstrap.build_llm",
+                return_value=object(),
+            ),
+            patch(
+                "voice_assistant.bootstrap.build_tts",
+                return_value=object(),
+            ),
+            patch(
+                "voice_assistant.bootstrap.SearXNGSearchProvider",
+                return_value=web_provider,
+            ) as web_provider_mock,
+            patch(
+                "voice_assistant.bootstrap.build_builtin_tool_registry",
+                return_value=object(),
+            ) as registry_mock,
+            patch("voice_assistant.bootstrap.BoundedToolLoop"),
+            patch("voice_assistant.bootstrap.VoicePipeline"),
+        ):
+            build_pipeline(config)
+
+        web_provider_mock.assert_called_once_with(
+            endpoint="https://search.example/searxng",
+            timeout_seconds=5,
+            max_results=4,
+            max_response_bytes=500_000,
+            language="zh-CN",
+            safesearch=2,
+        )
+        registry_mock.assert_called_once_with(
+            timeout_seconds=2.0,
+            max_result_chars=6000,
+            web_search=web_provider,
+            web_search_timeout_seconds=6.0,
+        )
 
 
 if __name__ == "__main__":

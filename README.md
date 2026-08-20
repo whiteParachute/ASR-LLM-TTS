@@ -142,6 +142,40 @@ and memory, sandboxed Python/Bash, Browser Use, and finally Computer Use. Shell,
 browser actions, and desktop control remain disabled until their required
 scope, confirmation, audit, and emergency-stop boundaries are implemented.
 
+## Web Search v1
+
+The first network tool uses an operator-configured SearXNG instance. It sends a
+bounded `GET /search` request with `format=json`, normalizes at most ten HTTP(S)
+results, removes duplicates and unsafe literal-local URLs, and passes titles,
+snippets, dates, and source URLs back to Qwen for a final summary. Search
+failures return one short fallback response instead of retrying the network
+inside the tool loop.
+
+Web search is disabled by default. Configure a SearXNG base URL and enable it
+only after that instance has JSON output enabled:
+
+```yaml
+tools:
+  enabled: true
+  max_result_chars: 6000
+  web_search:
+    enabled: true
+    provider: searxng
+    endpoint: http://127.0.0.1:8080
+    timeout_seconds: 6.0
+    max_results: 5
+    max_response_bytes: 1000000
+    language: zh-CN
+    safesearch: 1
+```
+
+The endpoint is trusted operator configuration and may point to a local
+self-hosted instance. The model cannot choose or replace it. This milestone
+does not fetch result pages; URL fetching, redirect checks, DNS/private-network
+protection, and page-content prompt-injection defenses belong to Page Fetch
+v1. See the official [SearXNG Search API](https://docs.searxng.org/dev/search_api.html)
+for server-side JSON format configuration.
+
 ## Performance observability v1
 
 Each conversation turn now prints privacy-safe stage timings for

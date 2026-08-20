@@ -57,8 +57,10 @@ Planned increments:
 3. ✅ Gate built-in tools by explicit intent and return trusted deterministic
    results without a second LLM round. Ordinary chat no longer carries tool
    schemas.
-4. Add a configurable web-search adapter, preferring a self-hosted SearXNG
-   endpoint or an explicitly configured search API.
+4. 🧪 Add a configurable SearXNG web-search adapter with bounded JSON results,
+   intent routing, per-tool timeout, and a one-shot offline fallback. Local
+   mocked tests are complete; Windows deployment against a real instance is
+   pending.
 5. Add safe page retrieval, source metadata, spoken summaries, and a clear
    offline/error fallback.
 6. Keep network tools disabled unless enabled in configuration.

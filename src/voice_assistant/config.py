@@ -75,11 +75,24 @@ class RuntimeConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class WebSearchConfig:
+    enabled: bool = False
+    provider: str = "searxng"
+    endpoint: str = ""
+    timeout_seconds: float = 6.0
+    max_results: int = 5
+    max_response_bytes: int = 1_000_000
+    language: str = "zh-CN"
+    safesearch: int = 1
+
+
+@dataclass(frozen=True, slots=True)
 class ToolUseConfig:
     enabled: bool = False
     max_rounds: int = 3
     timeout_seconds: float = 2.0
     max_result_chars: int = 2000
+    web_search: WebSearchConfig = field(default_factory=WebSearchConfig)
 
 
 @dataclass(frozen=True, slots=True)
@@ -149,6 +162,11 @@ def load_config(config_path: Path) -> AppConfig:
     tools = raw_config.get("tools", {})
     if not isinstance(tools, dict):
         raise ConfigError("Missing or Invalid config session: tools")
+    web_search = tools.get("web_search", {})
+    if not isinstance(web_search, dict):
+        raise ConfigError(
+            "Missing or Invalid config session: tools.web_search"
+        )
     audio = raw_config.get("audio", {})
     if not isinstance(audio, dict):
         raise ConfigError("Missing or Invalid config session: audio")
@@ -256,6 +274,22 @@ def load_config(config_path: Path) -> AppConfig:
                 max_rounds=tools.get("max_rounds", 3),
                 timeout_seconds=tools.get("timeout_seconds", 2.0),
                 max_result_chars=tools.get("max_result_chars", 2000),
+                web_search=WebSearchConfig(
+                    enabled=web_search.get("enabled", False),
+                    provider=web_search.get("provider", "searxng"),
+                    endpoint=web_search.get("endpoint", ""),
+                    timeout_seconds=web_search.get(
+                        "timeout_seconds",
+                        6.0,
+                    ),
+                    max_results=web_search.get("max_results", 5),
+                    max_response_bytes=web_search.get(
+                        "max_response_bytes",
+                        1_000_000,
+                    ),
+                    language=web_search.get("language", "zh-CN"),
+                    safesearch=web_search.get("safesearch", 1),
+                ),
             ),
             audio=AudioConfig(
                 playback_backend=audio.get(

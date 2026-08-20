@@ -21,6 +21,7 @@ from voice_assistant.contracts import (
     ToolDefinition,
 )
 from voice_assistant.observability import PerformanceLogger, measure_stage
+from voice_assistant.web_search import WebSearchProvider
 
 
 ToolHandler = Callable[[dict[str, Any]], Any]
@@ -48,6 +49,8 @@ class _RegisteredTool:
     handler: ToolHandler
     intent_matcher: ToolIntentMatcher | None = None
     reply_formatter: ToolReplyFormatter | None = None
+    timeout_seconds: float | None = None
+    failure_reply: str | None = None
 
 
 class ToolRegistry:
@@ -86,6 +89,8 @@ class ToolRegistry:
         *,
         intent_matcher: ToolIntentMatcher | None = None,
         reply_formatter: ToolReplyFormatter | None = None,
+        timeout_seconds: float | None = None,
+        failure_reply: str | None = None,
     ) -> None:
         if not _TOOL_NAME.fullmatch(definition.name):
             raise ValueError(f"Invalid tool name: {definition.name}")
@@ -93,11 +98,17 @@ class ToolRegistry:
             raise ValueError(f"Tool is already registered: {definition.name}")
         if definition.parameters.get("type") != "object":
             raise ValueError("Tool parameters schema must describe an object")
+        if timeout_seconds is not None and timeout_seconds <= 0:
+            raise ValueError("Tool timeout override must be positive")
+        if failure_reply is not None and not failure_reply.strip():
+            raise ValueError("Tool failure reply cannot be empty")
         self._tools[definition.name] = _RegisteredTool(
             definition=definition,
             handler=handler,
             intent_matcher=intent_matcher,
             reply_formatter=reply_formatter,
+            timeout_seconds=timeout_seconds,
+            failure_reply=(failure_reply.strip() if failure_reply else None),
         )
 
     def execute(
@@ -131,17 +142,25 @@ class ToolRegistry:
             name=f"tool-{call.name}",
             daemon=True,
         )
+        timeout_seconds = (
+            registered.timeout_seconds or self._timeout_seconds
+        )
         worker.start()
-        worker.join(self._timeout_seconds)
+        worker.join(timeout_seconds)
         if worker.is_alive():
             return self._error(
                 "timeout",
-                f"Tool exceeded {self._timeout_seconds:g}s timeout",
+                f"Tool exceeded {timeout_seconds:g}s timeout",
+                direct_reply=registered.failure_reply,
             )
 
         succeeded, value = results.get_nowait()
         if not succeeded:
-            return self._error("execution_error", "Tool execution failed")
+            return self._error(
+                "execution_error",
+                "Tool execution failed",
+                direct_reply=registered.failure_reply,
+            )
         direct_reply = None
         if registered.reply_formatter is not None:
             direct_reply = (
@@ -157,7 +176,13 @@ class ToolRegistry:
             direct_reply=direct_reply,
         )
 
-    def _error(self, error_type: str, message: str) -> ToolExecution:
+    def _error(
+        self,
+        error_type: str,
+        message: str,
+        *,
+        direct_reply: str | None = None,
+    ) -> ToolExecution:
         return ToolExecution(
             content=_bounded_json(
                 {
@@ -171,6 +196,7 @@ class ToolRegistry:
             ),
             ok=False,
             error_type=error_type,
+            direct_reply=direct_reply,
         )
 
 
@@ -253,7 +279,7 @@ class BoundedToolLoop:
                     )
                 )
                 tool_rounds += 1
-                direct_replies: list[str] = []
+                direct_replies: list[tuple[str, bool]] = []
                 for call_index, call in enumerate(
                     response.tool_calls,
                     start=1,
@@ -278,15 +304,21 @@ class BoundedToolLoop:
                         Message(role="tool", content=execution.content)
                     )
                     if execution.direct_reply is not None:
-                        direct_replies.append(execution.direct_reply)
+                        direct_replies.append(
+                            (execution.direct_reply, execution.ok)
+                        )
 
                 if (
                     len(response.tool_calls) == 1
                     and len(direct_replies) == 1
                 ):
-                    reply = direct_replies[0]
+                    reply, direct_reply_ok = direct_replies[0]
                     loop_span.add_fields(
-                        route="builtin_fast_path",
+                        route=(
+                            "builtin_fast_path"
+                            if direct_reply_ok
+                            else "tool_fallback"
+                        ),
                         tool_rounds=tool_rounds,
                         tool_calls=tool_calls,
                         direct_reply=True,
@@ -300,6 +332,8 @@ def build_builtin_tool_registry(
     timeout_seconds: float,
     max_result_chars: int,
     now_factory: NowFactory | None = None,
+    web_search: WebSearchProvider | None = None,
+    web_search_timeout_seconds: float | None = None,
 ) -> ToolRegistry:
     registry = ToolRegistry(
         timeout_seconds=timeout_seconds,
@@ -355,6 +389,39 @@ def build_builtin_tool_registry(
         intent_matcher=_is_calculation_request,
         reply_formatter=_format_calculation_reply,
     )
+    if web_search is not None:
+        registry.register(
+            ToolDefinition(
+                name="web_search",
+                description=(
+                    "Search the web for current or explicitly requested "
+                    "information. Use the returned titles, snippets, dates, "
+                    "and URLs as sources; do not invent facts or URLs."
+                ),
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "A concise web search query.",
+                        },
+                        "time_range": {
+                            "type": "string",
+                            "enum": ["day", "month", "year"],
+                            "description": (
+                                "Optional freshness filter for the search."
+                            ),
+                        },
+                    },
+                    "required": ["query"],
+                    "additionalProperties": False,
+                },
+            ),
+            _build_web_search_handler(web_search),
+            intent_matcher=_is_web_search_request,
+            timeout_seconds=web_search_timeout_seconds,
+            failure_reply="暂时无法联网查询，请稍后再试。",
+        )
     return registry
 
 
@@ -367,6 +434,18 @@ _CALCULATION_NUMBER = re.compile(
 )
 _CALCULATION_OPERATION = re.compile(
     r"(?:加|减|乘|除|计算|等于|次方|平方|求和|百分之|[+*/%×÷])"
+)
+_WEB_SEARCH_REQUEST = re.compile(
+    r"(?:联网|上网|网上).{0,8}(?:搜|查|搜索|查询)"
+    r"|(?:搜一下|搜索|查一下|查一查|查询)"
+    r"|(?:最新|最近|目前|当前).{0,24}"
+    r"(?:新闻|消息|动态|进展|情况|价格|行情|天气|比赛|政策|版本|发布)"
+    r"|(?:今天|昨日|昨天|本周).{0,24}"
+    r"(?:新闻|消息|天气|发生|赛事|比赛)"
+    r"|(?:天气|气温|降雨|空气质量)(?:怎么样|如何|多少|预报)?"
+    r"|(?:比赛结果|最新比分|实时比分)"
+    r"|(?:现任|目前|当前).{0,16}"
+    r"(?:总统|总理|主席|CEO|首席执行官|负责人)"
 )
 
 
@@ -386,6 +465,10 @@ def _is_calculation_request(text: str) -> bool:
         _CALCULATION_NUMBER.search(text)
         and _CALCULATION_OPERATION.search(text)
     )
+
+
+def _is_web_search_request(text: str) -> bool:
+    return bool(_WEB_SEARCH_REQUEST.search(text))
 
 
 def _format_time_reply(result: Any, question: str) -> str:
@@ -420,6 +503,22 @@ def _format_calculation_reply(result: Any, _question: str) -> str:
     if not isinstance(result, dict) or "answer" not in result:
         raise ValueError("Calculator returned an invalid result")
     return f"答案是{result['answer']}。"
+
+
+def _build_web_search_handler(
+    provider: WebSearchProvider,
+) -> ToolHandler:
+    def search_web(arguments: dict[str, Any]) -> dict[str, Any]:
+        return provider.search(
+            str(arguments["query"]),
+            time_range=(
+                str(arguments["time_range"])
+                if "time_range" in arguments
+                else None
+            ),
+        )
+
+    return search_web
 
 
 def _build_time_handler(now_factory: NowFactory) -> ToolHandler:
@@ -535,7 +634,14 @@ def _validate_arguments(
     for name, value in arguments.items():
         property_schema = properties.get(name, {})
         expected_type = property_schema.get("type")
-        validated[name] = _coerce_argument(value, expected_type, name)
+        coerced = _coerce_argument(value, expected_type, name)
+        allowed_values = property_schema.get("enum")
+        if isinstance(allowed_values, list) and coerced not in allowed_values:
+            raise ValueError(
+                f"Argument {name} must be one of: "
+                + ", ".join(str(item) for item in allowed_values)
+            )
+        validated[name] = coerced
     return validated
 
 

@@ -73,6 +73,17 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(config.tools.max_rounds, 3)
         self.assertEqual(config.tools.timeout_seconds, 2.0)
         self.assertEqual(config.tools.max_result_chars, 2000)
+        self.assertFalse(config.tools.web_search.enabled)
+        self.assertEqual(config.tools.web_search.provider, "searxng")
+        self.assertEqual(config.tools.web_search.endpoint, "")
+        self.assertEqual(config.tools.web_search.timeout_seconds, 6.0)
+        self.assertEqual(config.tools.web_search.max_results, 5)
+        self.assertEqual(
+            config.tools.web_search.max_response_bytes,
+            1_000_000,
+        )
+        self.assertEqual(config.tools.web_search.language, "zh-CN")
+        self.assertEqual(config.tools.web_search.safesearch, 1)
         self.assertTrue(config.observability.enabled)
         self.assertTrue(config.observability.console)
         self.assertTrue(config.observability.jsonl)
@@ -119,7 +130,12 @@ class ConfigTest(unittest.TestCase):
         self.assertTrue(config.tools.enabled)
         self.assertEqual(config.tools.max_rounds, 3)
         self.assertEqual(config.tools.timeout_seconds, 2.0)
-        self.assertEqual(config.tools.max_result_chars, 2000)
+        self.assertEqual(config.tools.max_result_chars, 6000)
+        self.assertFalse(config.tools.web_search.enabled)
+        self.assertEqual(
+            config.tools.web_search.endpoint,
+            "http://127.0.0.1:8080",
+        )
 
     def test_loads_cosyvoice3_experimental_config(self) -> None:
         config = load_config(
@@ -160,6 +176,8 @@ class ConfigTest(unittest.TestCase):
         self.assertFalse(config.runtime.stream_llm_to_tts)
         self.assertEqual(config.runtime.first_reply_chunk_chars, 6)
         self.assertTrue(config.tools.enabled)
+        self.assertFalse(config.tools.web_search.enabled)
+        self.assertEqual(config.tools.max_result_chars, 6000)
 
 if  __name__ == "__main__":
     unittest.main()

@@ -60,6 +60,15 @@ tools:
   max_rounds: 3
   timeout_seconds: 2.0
   max_result_chars: 2000
+  web_search:
+    enabled: false
+    provider: searxng
+    endpoint: ""
+    timeout_seconds: 6.0
+    max_results: 5
+    max_response_bytes: 1000000
+    language: zh-CN
+    safesearch: 1
 
 observability:
   enabled: true

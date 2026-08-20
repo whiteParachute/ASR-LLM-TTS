@@ -45,6 +45,32 @@ class FakeToolLLM:
         return self.responses.pop(0)
 
 
+class FakeWebSearch:
+    def __init__(self) -> None:
+        self.query = ""
+        self.time_range: str | None = None
+
+    def search(self, query: str, *, time_range: str | None = None):
+        self.query = query
+        self.time_range = time_range
+        return {
+            "query": query,
+            "result_count": 1,
+            "results": [
+                {
+                    "title": "AI 新闻",
+                    "url": "https://example.com/news",
+                    "snippet": "一条最新消息。",
+                }
+            ],
+        }
+
+
+class FailingWebSearch:
+    def search(self, query: str, *, time_range: str | None = None):
+        raise RuntimeError("network unavailable")
+
+
 class ToolingTest(unittest.TestCase):
     def test_executes_calculator_without_eval(self) -> None:
         registry = build_builtin_tool_registry(
@@ -183,6 +209,33 @@ class ToolingTest(unittest.TestCase):
         self.assertLessEqual(len(result.content), 128)
         self.assertTrue(payload["truncated"])
 
+    def test_supports_per_tool_timeout_and_failure_reply(self) -> None:
+        registry = ToolRegistry(timeout_seconds=1, max_result_chars=500)
+        release = threading.Event()
+        registry.register(
+            ToolDefinition(
+                name="network_tool",
+                description="Test network timeout.",
+                parameters={
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": False,
+                },
+            ),
+            lambda _: release.wait(timeout=1),
+            timeout_seconds=0.01,
+            failure_reply="网络暂时不可用。",
+        )
+
+        result = registry.execute(
+            ToolCall(name="network_tool", arguments={})
+        )
+        release.set()
+
+        self.assertFalse(result.ok)
+        self.assertEqual(result.error_type, "timeout")
+        self.assertEqual(result.direct_reply, "网络暂时不可用。")
+
     def test_returns_builtin_calculator_result_without_second_llm(self) -> None:
         registry = build_builtin_tool_registry(
             timeout_seconds=1,
@@ -252,6 +305,98 @@ class ToolingTest(unittest.TestCase):
         followup = llm.conversations[1]
         self.assertEqual(followup[-2].role, "assistant")
         self.assertEqual(followup[-1].role, "tool")
+
+    def test_routes_web_search_through_native_summary_round(self) -> None:
+        web_search = FakeWebSearch()
+        registry = build_builtin_tool_registry(
+            timeout_seconds=1,
+            max_result_chars=2000,
+            web_search=web_search,
+            web_search_timeout_seconds=2,
+        )
+        llm = FakeToolLLM(
+            [
+                ToolAwareResponse(
+                    tool_calls=(
+                        ToolCall(
+                            name="web_search",
+                            arguments={
+                                "query": "最新 AI 新闻",
+                                "time_range": "day",
+                            },
+                        ),
+                    )
+                ),
+                ToolAwareResponse(content="今天有一条新的AI消息。"),
+            ]
+        )
+        loop = BoundedToolLoop(llm, registry, max_rounds=2)
+
+        reply = loop.generate(
+            [Message(role="user", content="帮我查一下最新AI新闻")]
+        )
+
+        self.assertEqual(reply, "今天有一条新的AI消息。")
+        self.assertEqual(web_search.query, "最新 AI 新闻")
+        self.assertEqual(web_search.time_range, "day")
+        self.assertEqual(
+            [definition.name for definition in llm.tools[0]],
+            ["web_search"],
+        )
+        tool_result = json.loads(llm.conversations[1][-1].content)
+        self.assertEqual(
+            tool_result["result"]["results"][0]["url"],
+            "https://example.com/news",
+        )
+
+    def test_returns_one_fallback_when_web_search_fails(self) -> None:
+        registry = build_builtin_tool_registry(
+            timeout_seconds=1,
+            max_result_chars=2000,
+            web_search=FailingWebSearch(),
+            web_search_timeout_seconds=2,
+        )
+        llm = FakeToolLLM(
+            [
+                ToolAwareResponse(
+                    tool_calls=(
+                        ToolCall(
+                            name="web_search",
+                            arguments={"query": "最新 AI 新闻"},
+                        ),
+                    )
+                )
+            ]
+        )
+        loop = BoundedToolLoop(llm, registry, max_rounds=3)
+
+        reply = loop.generate(
+            [Message(role="user", content="帮我查一下最新AI新闻")]
+        )
+
+        self.assertEqual(reply, "暂时无法联网查询，请稍后再试。")
+        self.assertEqual(len(llm.conversations), 1)
+
+    def test_rejects_invalid_web_search_time_range_before_execution(
+        self,
+    ) -> None:
+        web_search = FakeWebSearch()
+        registry = build_builtin_tool_registry(
+            timeout_seconds=1,
+            max_result_chars=2000,
+            web_search=web_search,
+        )
+
+        result = registry.execute(
+            ToolCall(
+                name="web_search",
+                arguments={"query": "AI 新闻", "time_range": "week"},
+            )
+        )
+
+        self.assertFalse(result.ok)
+        self.assertEqual(result.error_type, "invalid_arguments")
+        self.assertEqual(web_search.query, "")
 
     def test_stops_when_model_exceeds_tool_round_limit(self) -> None:
         registry = ToolRegistry(timeout_seconds=1, max_result_chars=500)
