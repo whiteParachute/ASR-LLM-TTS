@@ -16,6 +16,7 @@ from .observability import (
     measure_stage,
     wav_duration_ms,
 )
+from .tooling import BoundedToolLoop
 
 class VoicePipeline:
     def __init__(
@@ -26,6 +27,7 @@ class VoicePipeline:
         system_prompt: str,
         reply_instructions: str = "",
         performance: PerformanceLogger | None = None,
+        tool_loop: BoundedToolLoop | None = None,
     ) -> None:
         self._asr = asr
         self._llm = llm
@@ -33,6 +35,7 @@ class VoicePipeline:
         self._system_prompt = system_prompt
         self._reply_instructions = reply_instructions
         self._performance = performance
+        self._tool_loop = tool_loop
 
     def prepare(self, audio_path: Path) -> PreparedResponse:
         transcript = self.transcribe(audio_path)
@@ -65,7 +68,10 @@ class VoicePipeline:
             "llm",
             input_chars=sum(len(message.content) for message in messages),
         ) as llm_span:
-            reply = self._llm.generate(messages).strip()
+            if self._tool_loop is None:
+                reply = self._llm.generate(messages).strip()
+            else:
+                reply = self._tool_loop.generate(messages).strip()
 
             if not reply:
                 raise ValueError("LLM returned an empty reply.")
@@ -75,9 +81,15 @@ class VoicePipeline:
 
     @property
     def supports_streaming_llm(self) -> bool:
-        return callable(getattr(self._llm, "stream_generate", None))
+        return self._tool_loop is None and callable(
+            getattr(self._llm, "stream_generate", None)
+        )
 
     def stream_reply(self, transcript: str) -> Iterator[str]:
+        if self._tool_loop is not None:
+            raise RuntimeError(
+                "Streaming LLM replies are disabled while tools are enabled"
+            )
         stream_generate = getattr(self._llm, "stream_generate", None)
         if not callable(stream_generate):
             raise RuntimeError("Configured LLM provider does not stream text")

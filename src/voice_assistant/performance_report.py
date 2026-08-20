@@ -15,6 +15,8 @@ REPORTED_STAGES = (
     "llm_first_text",
     "llm_first_segment",
     "llm_stream",
+    "tool_loop",
+    "tool_execute",
     "response_prepare",
     "tts_first_chunk",
     "time_to_first_audio",

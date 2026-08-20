@@ -57,6 +57,16 @@ class FakeStreamingTTS(FakeTTS):
         yield AudioChunk(b"\x03\x00\x04\x00", sample_rate=24000)
 
 
+class FakeToolLoop:
+    def __init__(self, reply: str) -> None:
+        self.reply = reply
+        self.received_messages: list[Message] = []
+
+    def generate(self, messages: Sequence[Message]) -> str:
+        self.received_messages = list(messages)
+        return self.reply
+
+
 class VoicePipelineTest(unittest.TestCase):
     def test_pipeline_result_defaults_to_primary_audio_path(self) -> None:
         audio_path = Path("answer.wav")
@@ -164,6 +174,28 @@ class VoicePipelineTest(unittest.TestCase):
                 Message(role="user", content="你好\n\n简短回答。"),
             ],
         )
+
+    def test_uses_tool_loop_and_disables_streaming_llm_path(self) -> None:
+        llm = FakeStreamingLLM(["不应", "使用"])
+        tool_loop = FakeToolLoop("工具回答")
+        pipeline = VoicePipeline(
+            asr=FakeASR(transcript="现在几点？"),
+            llm=llm,
+            tts=FakeTTS(),
+            system_prompt="测试助手",
+            tool_loop=tool_loop,
+        )
+
+        reply = pipeline.generate_reply("现在几点？")
+
+        self.assertEqual(reply, "工具回答")
+        self.assertFalse(pipeline.supports_streaming_llm)
+        self.assertEqual(
+            tool_loop.received_messages[-1].content,
+            "现在几点？",
+        )
+        with self.assertRaisesRegex(RuntimeError, "tools are enabled"):
+            list(pipeline.stream_reply("现在几点？"))
 
     def test_stops_when_asr_returns_empty_text(self) -> None:
         # Arrange

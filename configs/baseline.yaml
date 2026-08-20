@@ -55,6 +55,12 @@ runtime:
   output_dir: output
   reply_chunk_max_chars: 18
 
+tools:
+  enabled: false
+  max_rounds: 3
+  timeout_seconds: 2.0
+  max_result_chars: 2000
+
 observability:
   enabled: true
   console: true

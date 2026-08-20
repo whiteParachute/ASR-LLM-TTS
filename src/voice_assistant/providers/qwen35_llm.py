@@ -1,11 +1,17 @@
 from __future__ import annotations
 
 import queue
+import re
 from collections.abc import Iterator
 from threading import Thread
 from typing import Any, Callable, Protocol, Sequence
 
-from voice_assistant.contracts import Message
+from voice_assistant.contracts import (
+    Message,
+    ToolAwareResponse,
+    ToolCall,
+    ToolDefinition,
+)
 
 
 StreamerFactory = Callable[..., Any]
@@ -29,7 +35,7 @@ class Qwen35Processor(Protocol):
         add_generation_prompt: bool,
         return_dict: bool,
         return_tensors: str,
-        enable_thinking: bool,
+        **kwargs: Any,
     ) -> Any:
         ...
 
@@ -105,23 +111,22 @@ class Qwen35LLM:
             self._processor = processor
 
     def generate(self, messages: Sequence[Message]) -> str:
-        model_inputs, generation_kwargs = self._prepare_generation(messages)
-
-        generated_ids = self._model.generate(
-            **model_inputs,
-            **generation_kwargs,
-        )
-        input_length = len(model_inputs["input_ids"][0])
-        answer_ids = generated_ids[0][input_length:]
-        reply = self._processor.decode(
-            answer_ids,
-            skip_special_tokens=True,
-        ).strip()
-
+        reply = self._generate_text(messages)
         if not reply:
             raise RuntimeError("Qwen3.5 returned an empty response")
-
         return reply
+
+    def generate_with_tools(
+        self,
+        messages: Sequence[Message],
+        tools: Sequence[ToolDefinition],
+    ) -> ToolAwareResponse:
+        if not tools:
+            raise ValueError("At least one tool definition is required")
+        generated = self._generate_text(messages, tools=tools)
+        if not generated:
+            raise RuntimeError("Qwen3.5 returned an empty response")
+        return parse_qwen_tool_response(generated)
 
     def stream_generate(self, messages: Sequence[Message]) -> Iterator[str]:
         streamer_factory = self._streamer_factory
@@ -175,12 +180,14 @@ class Qwen35LLM:
     def _prepare_generation(
         self,
         messages: Sequence[Message],
+        tools: Sequence[ToolDefinition] = (),
     ) -> tuple[Any, dict[str, Any]]:
         if not messages:
             raise ValueError("Messages cannot be empty")
 
-        raw_messages = [
-            {
+        raw_messages: list[dict[str, Any]] = []
+        for message in messages:
+            raw_message: dict[str, Any] = {
                 "role": message.role,
                 "content": [
                     {
@@ -189,16 +196,33 @@ class Qwen35LLM:
                     }
                 ],
             }
-            for message in messages
-        ]
+            if message.tool_calls:
+                raw_message["tool_calls"] = [
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": call.name,
+                            "arguments": call.arguments,
+                        },
+                    }
+                    for call in message.tool_calls
+                ]
+            raw_messages.append(raw_message)
 
+        template_kwargs: dict[str, Any] = {
+            "tokenize": True,
+            "add_generation_prompt": True,
+            "return_dict": True,
+            "return_tensors": "pt",
+            "enable_thinking": self._enable_thinking,
+        }
+        if tools:
+            template_kwargs["tools"] = [
+                tool.as_chat_template_dict() for tool in tools
+            ]
         model_inputs = self._processor.apply_chat_template(
             raw_messages,
-            tokenize=True,
-            add_generation_prompt=True,
-            return_dict=True,
-            return_tensors="pt",
-            enable_thinking=self._enable_thinking,
+            **template_kwargs,
         )
         model_inputs = model_inputs.to(self._model.device)
 
@@ -213,3 +237,81 @@ class Qwen35LLM:
                 top_k=self._top_k,
             )
         return model_inputs, generation_kwargs
+
+    def _generate_text(
+        self,
+        messages: Sequence[Message],
+        tools: Sequence[ToolDefinition] = (),
+    ) -> str:
+        model_inputs, generation_kwargs = self._prepare_generation(
+            messages,
+            tools=tools,
+        )
+        generated_ids = self._model.generate(
+            **model_inputs,
+            **generation_kwargs,
+        )
+        input_length = len(model_inputs["input_ids"][0])
+        answer_ids = generated_ids[0][input_length:]
+        return self._processor.decode(
+            answer_ids,
+            skip_special_tokens=True,
+        ).strip()
+
+
+_TOOL_CALL_PATTERN = re.compile(
+    r"<tool_call>\s*(.*?)\s*</tool_call>",
+    re.DOTALL,
+)
+_FUNCTION_PATTERN = re.compile(
+    r"<function=([A-Za-z_][A-Za-z0-9_]{0,63})>\s*"
+    r"(.*?)\s*</function>",
+    re.DOTALL,
+)
+_PARAMETER_PATTERN = re.compile(
+    r"<parameter=([A-Za-z_][A-Za-z0-9_]{0,63})>\s*"
+    r"(.*?)\s*</parameter>",
+    re.DOTALL,
+)
+
+
+def parse_qwen_tool_response(text: str) -> ToolAwareResponse:
+    """Parse the native XML-like tool format emitted by Qwen3.5."""
+    cleaned = text.strip()
+    matches = list(_TOOL_CALL_PATTERN.finditer(cleaned))
+    if not matches:
+        if "<tool_call>" in cleaned or "</tool_call>" in cleaned:
+            raise RuntimeError("Qwen3.5 returned a malformed tool call")
+        return ToolAwareResponse(content=cleaned)
+
+    content = cleaned[: matches[0].start()].strip()
+    cursor = matches[0].start()
+    calls: list[ToolCall] = []
+    for match in matches:
+        if cleaned[cursor : match.start()].strip():
+            raise RuntimeError("Unexpected text between Qwen3.5 tool calls")
+        function = _FUNCTION_PATTERN.fullmatch(match.group(1).strip())
+        if function is None:
+            raise RuntimeError("Qwen3.5 returned a malformed function call")
+
+        arguments: dict[str, Any] = {}
+        body = function.group(2)
+        parameter_cursor = 0
+        for parameter in _PARAMETER_PATTERN.finditer(body):
+            if body[parameter_cursor : parameter.start()].strip():
+                raise RuntimeError(
+                    "Qwen3.5 returned malformed tool parameters"
+                )
+            name = parameter.group(1)
+            if name in arguments:
+                raise RuntimeError(f"Duplicate tool parameter: {name}")
+            arguments[name] = parameter.group(2).strip()
+            parameter_cursor = parameter.end()
+        if body[parameter_cursor:].strip():
+            raise RuntimeError("Qwen3.5 returned malformed tool parameters")
+        calls.append(ToolCall(name=function.group(1), arguments=arguments))
+        cursor = match.end()
+
+    if cleaned[cursor:].strip():
+        raise RuntimeError("Unexpected text after Qwen3.5 tool calls")
+    return ToolAwareResponse(content=content, tool_calls=tuple(calls))

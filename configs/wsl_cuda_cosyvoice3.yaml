@@ -60,6 +60,12 @@ runtime:
   stream_llm_to_tts: false
   first_reply_chunk_chars: 6
 
+tools:
+  enabled: true
+  max_rounds: 3
+  timeout_seconds: 2.0
+  max_result_chars: 2000
+
 observability:
   enabled: true
   console: true

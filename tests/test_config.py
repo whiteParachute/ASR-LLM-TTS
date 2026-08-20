@@ -69,6 +69,10 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(config.runtime.reply_chunk_max_chars, 18)
         self.assertFalse(config.runtime.stream_llm_to_tts)
         self.assertEqual(config.runtime.first_reply_chunk_chars, 6)
+        self.assertFalse(config.tools.enabled)
+        self.assertEqual(config.tools.max_rounds, 3)
+        self.assertEqual(config.tools.timeout_seconds, 2.0)
+        self.assertEqual(config.tools.max_result_chars, 2000)
         self.assertTrue(config.observability.enabled)
         self.assertTrue(config.observability.console)
         self.assertTrue(config.observability.jsonl)
@@ -112,6 +116,10 @@ class ConfigTest(unittest.TestCase):
         self.assertIn("不超过15个汉字", config.llm.reply_instruction)
         self.assertFalse(config.runtime.stream_llm_to_tts)
         self.assertEqual(config.runtime.first_reply_chunk_chars, 6)
+        self.assertTrue(config.tools.enabled)
+        self.assertEqual(config.tools.max_rounds, 3)
+        self.assertEqual(config.tools.timeout_seconds, 2.0)
+        self.assertEqual(config.tools.max_result_chars, 2000)
 
     def test_loads_cosyvoice3_experimental_config(self) -> None:
         config = load_config(
@@ -151,6 +159,7 @@ class ConfigTest(unittest.TestCase):
         )
         self.assertFalse(config.runtime.stream_llm_to_tts)
         self.assertEqual(config.runtime.first_reply_chunk_chars, 6)
+        self.assertTrue(config.tools.enabled)
 
 if  __name__ == "__main__":
     unittest.main()

@@ -1,8 +1,11 @@
 import unittest
 from typing import Any
 
-from voice_assistant.contracts import Message
-from voice_assistant.providers.qwen35_llm import Qwen35LLM
+from voice_assistant.contracts import Message, ToolCall, ToolDefinition
+from voice_assistant.providers.qwen35_llm import (
+    Qwen35LLM,
+    parse_qwen_tool_response,
+)
 
 
 class FakeBatch(dict[str, Any]):
@@ -119,6 +122,82 @@ class Qwen35LLMTest(unittest.TestCase):
         self.assertEqual(model.received_arguments["top_k"], 20)
         self.assertEqual(processor.received_decode_ids, [9, 10])
         self.assertEqual(reply, "模型回答")
+
+    def test_generates_native_tool_call(self) -> None:
+        processor = FakeProcessor(
+            decoded=(
+                "<tool_call>\n"
+                "<function=calculate>\n"
+                "<parameter=expression>\n2 + 3\n</parameter>\n"
+                "</function>\n"
+                "</tool_call>"
+            )
+        )
+        provider = Qwen35LLM(
+            model_name="test-model",
+            model=FakeModel(),
+            processor=processor,
+        )
+        tool = ToolDefinition(
+            name="calculate",
+            description="Calculate arithmetic.",
+            parameters={
+                "type": "object",
+                "properties": {"expression": {"type": "string"}},
+                "required": ["expression"],
+            },
+        )
+
+        response = provider.generate_with_tools(
+            [Message(role="user", content="2+3是多少？")],
+            [tool],
+        )
+
+        self.assertEqual(
+            response.tool_calls,
+            (ToolCall(name="calculate", arguments={"expression": "2 + 3"}),),
+        )
+        self.assertEqual(
+            processor.template_arguments["tools"],
+            [tool.as_chat_template_dict()],
+        )
+
+    def test_renders_tool_call_and_result_in_followup_messages(self) -> None:
+        processor = FakeProcessor(decoded="结果是5。")
+        provider = Qwen35LLM(
+            model_name="test-model",
+            model=FakeModel(),
+            processor=processor,
+        )
+        call = ToolCall(name="calculate", arguments={"expression": "2+3"})
+        tool = ToolDefinition(
+            name="calculate",
+            description="Calculate arithmetic.",
+            parameters={"type": "object", "properties": {}},
+        )
+
+        response = provider.generate_with_tools(
+            [
+                Message(role="user", content="2+3是多少？"),
+                Message(role="assistant", content="", tool_calls=(call,)),
+                Message(role="tool", content='{"ok":true,"result":5}'),
+            ],
+            [tool],
+        )
+
+        rendered_messages = processor.template_arguments["messages"]
+        self.assertEqual(response.content, "结果是5。")
+        self.assertEqual(
+            rendered_messages[1]["tool_calls"][0]["function"],
+            {"name": "calculate", "arguments": {"expression": "2+3"}},
+        )
+        self.assertEqual(rendered_messages[2]["role"], "tool")
+
+    def test_rejects_malformed_native_tool_call(self) -> None:
+        with self.assertRaisesRegex(RuntimeError, "malformed"):
+            parse_qwen_tool_response(
+                "<tool_call><function=calculate></tool_call>"
+            )
 
     def test_rejects_empty_messages(self) -> None:
         provider = Qwen35LLM(

@@ -2,14 +2,44 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Iterator, Literal, Protocol, Sequence
+from typing import Any, Iterable, Iterator, Literal, Protocol, Sequence
 
-Role = Literal["user", "system", "assistant"]
+Role = Literal["user", "system", "assistant", "tool"]
+
+
+@dataclass(frozen=True, slots=True)
+class ToolCall:
+    name: str
+    arguments: dict[str, Any]
+
+
+@dataclass(frozen=True, slots=True)
+class ToolDefinition:
+    name: str
+    description: str
+    parameters: dict[str, Any]
+
+    def as_chat_template_dict(self) -> dict[str, Any]:
+        return {
+            "type": "function",
+            "function": {
+                "name": self.name,
+                "description": self.description,
+                "parameters": self.parameters,
+            },
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class ToolAwareResponse:
+    content: str = ""
+    tool_calls: tuple[ToolCall, ...] = ()
 
 @dataclass(frozen=True, slots=True)
 class Message:
     role: Role
     content: str
+    tool_calls: tuple[ToolCall, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,6 +89,15 @@ class ASRProvider(Protocol):
 
 class LLMProvider(Protocol):
     def generate(self, messages: Sequence[Message]) -> str:
+        ...
+
+
+class ToolCallingLLMProvider(LLMProvider, Protocol):
+    def generate_with_tools(
+        self,
+        messages: Sequence[Message],
+        tools: Sequence[ToolDefinition],
+    ) -> ToolAwareResponse:
         ...
 
 

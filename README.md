@@ -109,6 +109,29 @@ The WSL-specific runtime settings are in `configs/wsl_cuda.yaml`.
 Generated recordings and replies are written under `output/wsl/` and
 model weights under `models/`; both are ignored by Git.
 
+## Tool use v1
+
+The WSL profiles enable Qwen3.5's native tool-call chat template. The first
+built-in tools are `get_current_time` and `calculate`; they provide a local,
+deterministic validation path before network search is added. Tool execution
+uses a strict registry with argument schemas, per-call timeouts, bounded
+result text, and a maximum number of model/tool rounds.
+
+Tool use can be configured without changing model code:
+
+```yaml
+tools:
+  enabled: true
+  max_rounds: 3
+  timeout_seconds: 2.0
+  max_result_chars: 2000
+```
+
+When tools are enabled, the assistant waits for the final tool-backed text
+before starting TTS. Performance logs record tool names, timings, round counts,
+and success status, but never tool arguments or returned content. Set
+`tools.enabled: false` for the original direct-generation path.
+
 ## Performance observability v1
 
 Each conversation turn now prints privacy-safe stage timings for

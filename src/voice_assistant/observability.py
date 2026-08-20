@@ -256,6 +256,14 @@ def _format_console_event(event: dict[str, Any]) -> str:
         "streaming_audio",
         "streaming_text",
         "target_chars",
+        "max_rounds",
+        "tool_name",
+        "tool_round",
+        "tool_rounds",
+        "tool_calls",
+        "tool_ok",
+        "tool_error_type",
+        "call_index",
         "error_type",
     ):
         if key in event:

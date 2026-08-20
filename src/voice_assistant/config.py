@@ -75,6 +75,14 @@ class RuntimeConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class ToolUseConfig:
+    enabled: bool = False
+    max_rounds: int = 3
+    timeout_seconds: float = 2.0
+    max_result_chars: int = 2000
+
+
+@dataclass(frozen=True, slots=True)
 class ObservabilityConfig:
     enabled: bool = False
     console: bool = True
@@ -107,6 +115,7 @@ class AppConfig:
     tts: TTSConfig
     runtime: RuntimeConfig
     audio: AudioConfig = field(default_factory=AudioConfig)
+    tools: ToolUseConfig = field(default_factory=ToolUseConfig)
     observability: ObservabilityConfig = field(
         default_factory=ObservabilityConfig,
     )
@@ -137,6 +146,9 @@ def load_config(config_path: Path) -> AppConfig:
     llm = _get_section(raw_config, "llm")
     tts = _get_section(raw_config, "tts")
     runtime = _get_section(raw_config, "runtime")
+    tools = raw_config.get("tools", {})
+    if not isinstance(tools, dict):
+        raise ConfigError("Missing or Invalid config session: tools")
     audio = raw_config.get("audio", {})
     if not isinstance(audio, dict):
         raise ConfigError("Missing or Invalid config session: audio")
@@ -238,6 +250,12 @@ def load_config(config_path: Path) -> AppConfig:
                     "first_reply_chunk_chars",
                     6,
                 ),
+            ),
+            tools=ToolUseConfig(
+                enabled=tools.get("enabled", False),
+                max_rounds=tools.get("max_rounds", 3),
+                timeout_seconds=tools.get("timeout_seconds", 2.0),
+                max_result_chars=tools.get("max_result_chars", 2000),
             ),
             audio=AudioConfig(
                 playback_backend=audio.get(

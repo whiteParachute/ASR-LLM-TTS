@@ -9,6 +9,7 @@ from voice_assistant.config import (
     LLMConfig,
     RuntimeConfig,
     TTSConfig,
+    ToolUseConfig,
 )
 
 
@@ -70,8 +71,69 @@ class BootstrapTest(unittest.TestCase):
             system_prompt=config.llm.system_prompt,
             reply_instructions=config.llm.reply_instruction,
             performance=None,
+            tool_loop=None,
         )
         self.assertIs(result, pipeline)
+
+    def test_builds_enabled_builtin_tool_loop(self) -> None:
+        config = AppConfig(
+            asr=ASRConfig(provider="sensevoice", model="test-asr"),
+            llm=LLMConfig(
+                provider="qwen35_transformers",
+                model="test-llm",
+                max_new_tokens=128,
+                system_prompt="测试助手",
+            ),
+            tts=TTSConfig(provider="edge_tts", default_voice="test"),
+            runtime=RuntimeConfig(output_dir=Path("output")),
+            tools=ToolUseConfig(
+                enabled=True,
+                max_rounds=2,
+                timeout_seconds=1.5,
+                max_result_chars=800,
+            ),
+        )
+        registry = object()
+        loop = object()
+
+        with (
+            patch(
+                "voice_assistant.bootstrap.build_asr",
+                return_value=object(),
+            ),
+            patch(
+                "voice_assistant.bootstrap.build_llm",
+                return_value=object(),
+            ) as llm_mock,
+            patch(
+                "voice_assistant.bootstrap.build_tts",
+                return_value=object(),
+            ),
+            patch(
+                "voice_assistant.bootstrap.build_builtin_tool_registry",
+                return_value=registry,
+            ) as registry_mock,
+            patch(
+                "voice_assistant.bootstrap.BoundedToolLoop",
+                return_value=loop,
+            ) as loop_mock,
+            patch(
+                "voice_assistant.bootstrap.VoicePipeline"
+            ) as pipeline_mock,
+        ):
+            build_pipeline(config)
+
+        registry_mock.assert_called_once_with(
+            timeout_seconds=1.5,
+            max_result_chars=800,
+        )
+        loop_mock.assert_called_once_with(
+            llm_mock.return_value,
+            registry,
+            max_rounds=2,
+            performance=None,
+        )
+        self.assertIs(pipeline_mock.call_args.kwargs["tool_loop"], loop)
 
 
 if __name__ == "__main__":
