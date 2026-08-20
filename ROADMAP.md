@@ -26,13 +26,20 @@ Planned increments:
 1. ✅ Add a repeatable end-to-end latency report over the structured session
    log.
 2. ✅ Separate cold-start, first-turn, and warmed-turn measurements.
-3. Warm the useful ASR/LLM/TTS paths only when the startup trade-off is clear.
-4. 🧪 Keep the implemented LLM-to-TTS streaming path experimental. A
+3. ⏸️ Keep the existing TTS startup warmup. Additional ASR/LLM warmup is
+   deferred because it only improves the first turn and does not reduce
+   steady-state latency.
+4. ❌ Reject short-segment LLM-to-TTS streaming for the stable path. A
    Windows test reduced warmed median time to first audio to about 1.55
-   seconds, but independent short TTS segments degraded Chinese prosody and
-   retriggered the microphone. The stable profiles therefore keep it off.
-5. Re-evaluate quantization and inference backends only after stage timings
-   show they are the bottleneck.
+   seconds, but independent TTS segments degraded Chinese prosody and
+   retriggered the microphone.
+5. ❌ Reject CosyVoice SFT JIT for the stable path. On the Windows machine,
+   median TTS time to first audio improved from 1.424 to 1.229 seconds, but
+   model loading increased from 13.7 to 23.2 seconds and the first two
+   measured syntheses took 6.68 and 8.18 seconds.
+
+Further latency work is paused until a backend can preserve full-sentence
+prosody and improve the end-to-end warmed median without startup regressions.
 
 ## 2. Tool use and web search
 
@@ -52,6 +59,8 @@ Planned increments:
 
 Acceptance requires answering a current-information question from retrieved
 results, retaining source URLs in logs/output, and never looping indefinitely.
+
+This is the next active milestone.
 
 ## 3. Optional authorized voice matching
 
