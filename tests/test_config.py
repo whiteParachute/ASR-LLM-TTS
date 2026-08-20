@@ -131,7 +131,7 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(config.tools.max_rounds, 3)
         self.assertEqual(config.tools.timeout_seconds, 2.0)
         self.assertEqual(config.tools.max_result_chars, 6000)
-        self.assertFalse(config.tools.web_search.enabled)
+        self.assertTrue(config.tools.web_search.enabled)
         self.assertEqual(
             config.tools.web_search.endpoint,
             "http://127.0.0.1:8080",
@@ -176,7 +176,7 @@ class ConfigTest(unittest.TestCase):
         self.assertFalse(config.runtime.stream_llm_to_tts)
         self.assertEqual(config.runtime.first_reply_chunk_chars, 6)
         self.assertTrue(config.tools.enabled)
-        self.assertFalse(config.tools.web_search.enabled)
+        self.assertTrue(config.tools.web_search.enabled)
         self.assertEqual(config.tools.max_result_chars, 6000)
 
 if  __name__ == "__main__":

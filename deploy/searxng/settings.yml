@@ -1,0 +1,20 @@
+use_default_settings: true
+
+general:
+  debug: false
+  instance_name: "ASR-LLM-TTS Search"
+
+search:
+  safe_search: 1
+  autocomplete: ""
+  formats:
+    - html
+    - json
+
+server:
+  bind_address: "0.0.0.0"
+  port: 8080
+  secret_key: "overridden-by-SEARXNG_SECRET"
+  limiter: false
+  public_instance: false
+  image_proxy: false

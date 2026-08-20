@@ -151,8 +151,23 @@ snippets, dates, and source URLs back to Qwen for a final summary. Search
 failures return one short fallback response instead of retrying the network
 inside the tool loop.
 
-Web search is disabled by default. Configure a SearXNG base URL and enable it
-only after that instance has JSON output enabled:
+Web search stays disabled in the baseline profile. The two WSL profiles enable
+it against a loopback-only SearXNG container. Start and verify that service
+before launching the assistant:
+
+```bash
+./scripts/manage_searxng.sh up
+./scripts/manage_searxng.sh test
+```
+
+The first `up` creates `deploy/searxng/.env` with a random local secret. That
+file is ignored by Git. The container publishes port 8080 only on
+`127.0.0.1`; it is not exposed to the Windows host LAN. Stop it without
+touching the model processes using `./scripts/manage_searxng.sh stop`, and use
+the `status` or `logs` commands for diagnostics.
+
+For another profile or an externally managed instance, configure the SearXNG
+base URL and enable it only after that instance has JSON output enabled:
 
 ```yaml
 tools:
@@ -174,7 +189,9 @@ self-hosted instance. The model cannot choose or replace it. This milestone
 does not fetch result pages; URL fetching, redirect checks, DNS/private-network
 protection, and page-content prompt-injection defenses belong to Page Fetch
 v1. See the official [SearXNG Search API](https://docs.searxng.org/dev/search_api.html)
-for server-side JSON format configuration.
+for server-side JSON format configuration and the official
+[container installation guide](https://docs.searxng.org/admin/installation-docker.html)
+for service management.
 
 ## Performance observability v1
 
