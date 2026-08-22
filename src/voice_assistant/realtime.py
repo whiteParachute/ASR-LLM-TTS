@@ -404,6 +404,7 @@ class RealtimeVoiceAssistant:
             reply=prepared.reply,
             audio_path=generated_paths[0],
             audio_paths=tuple(generated_paths),
+            sources=prepared.sources,
         )
 
     def _run_streaming_turn(
@@ -474,6 +475,7 @@ class RealtimeVoiceAssistant:
             reply=prepared.reply,
             audio_path=reply_path,
             audio_paths=(reply_path,),
+            sources=prepared.sources,
         )
 
     def _can_stream_audio(self) -> bool:
@@ -609,6 +611,10 @@ def build_realtime_assistant(config: AppConfig) -> RealtimeVoiceAssistant:
 def _print_result(result: PreparedResponse) -> None:
     print(f"识别文本：{result.transcript}")
     print(f"模型回复：{result.reply}")
+    if result.sources:
+        print("参考来源：")
+        for index, source in enumerate(result.sources, start=1):
+            print(f"  {index}. {source.title} - {source.url}")
 
 
 def _build_chunk_paths(reply_path: Path, chunk_count: int) -> list[Path]:

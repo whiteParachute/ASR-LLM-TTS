@@ -44,6 +44,11 @@ class VoicePipeline:
         return PreparedResponse(
             transcript=transcript,
             reply=reply,
+            sources=(
+                self._tool_loop.source_references
+                if self._tool_loop is not None
+                else ()
+            ),
         )
 
     def transcribe(self, audio_path: Path) -> str:
@@ -196,6 +201,7 @@ class VoicePipeline:
             reply=prepared.reply,
             audio_path=synthesized_path,
             audio_paths=(synthesized_path,),
+            sources=prepared.sources,
         )
 
     def close(self) -> None:

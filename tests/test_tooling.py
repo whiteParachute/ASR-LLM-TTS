@@ -7,6 +7,7 @@ from pathlib import Path
 
 from voice_assistant.contracts import (
     Message,
+    SourceReference,
     ToolAwareResponse,
     ToolCall,
     ToolDefinition,
@@ -347,6 +348,15 @@ class ToolingTest(unittest.TestCase):
         self.assertEqual(
             tool_result["result"]["results"][0]["url"],
             "https://example.com/news",
+        )
+        self.assertEqual(
+            loop.source_references,
+            (
+                SourceReference(
+                    title="AI 新闻",
+                    url="https://example.com/news",
+                ),
+            ),
         )
 
     def test_returns_one_fallback_when_web_search_fails(self) -> None:

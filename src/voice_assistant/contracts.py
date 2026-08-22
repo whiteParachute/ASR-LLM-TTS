@@ -43,11 +43,18 @@ class Message:
 
 
 @dataclass(frozen=True, slots=True)
+class SourceReference:
+    title: str
+    url: str
+
+
+@dataclass(frozen=True, slots=True)
 class PipelineResult:
     transcript: str
     reply: str
     audio_path: Path
     audio_paths: tuple[Path, ...] = ()
+    sources: tuple[SourceReference, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.audio_paths:
@@ -58,6 +65,7 @@ class PipelineResult:
 class PreparedResponse:
     transcript: str
     reply: str
+    sources: tuple[SourceReference, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

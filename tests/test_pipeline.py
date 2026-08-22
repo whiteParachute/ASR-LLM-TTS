@@ -4,7 +4,12 @@ import unittest
 from pathlib import Path
 from typing import Sequence
 
-from voice_assistant.contracts import AudioChunk, Message, PipelineResult
+from voice_assistant.contracts import (
+    AudioChunk,
+    Message,
+    PipelineResult,
+    SourceReference,
+)
 from voice_assistant.pipeline import VoicePipeline
 from voice_assistant.observability import PerformanceLogger
 
@@ -58,8 +63,13 @@ class FakeStreamingTTS(FakeTTS):
 
 
 class FakeToolLoop:
-    def __init__(self, reply: str) -> None:
+    def __init__(
+        self,
+        reply: str,
+        source_references: tuple[SourceReference, ...] = (),
+    ) -> None:
         self.reply = reply
+        self.source_references = source_references
         self.received_messages: list[Message] = []
 
     def generate(self, messages: Sequence[Message]) -> str:
@@ -196,6 +206,27 @@ class VoicePipelineTest(unittest.TestCase):
         )
         with self.assertRaisesRegex(RuntimeError, "tools are enabled"):
             list(pipeline.stream_reply("现在几点？"))
+
+    def test_keeps_tool_sources_separate_from_spoken_reply(self) -> None:
+        source = SourceReference(
+            title="天气来源",
+            url="https://example.com/weather",
+        )
+        tool_loop = FakeToolLoop("今天有雨。", (source,))
+        tts = FakeTTS()
+        pipeline = VoicePipeline(
+            asr=FakeASR(transcript="今天天气怎么样？"),
+            llm=FakeLLM(reply="不应使用"),
+            tts=tts,
+            system_prompt="测试助手",
+            tool_loop=tool_loop,
+        )
+
+        result = pipeline.run(Path("question.wav"), Path("answer.wav"))
+
+        self.assertEqual(result.reply, "今天有雨。")
+        self.assertEqual(result.sources, (source,))
+        self.assertEqual(tts.received_text, "今天有雨。")
 
     def test_stops_when_asr_returns_empty_text(self) -> None:
         # Arrange

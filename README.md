@@ -149,7 +149,9 @@ bounded `GET /search` request with `format=json`, normalizes at most ten HTTP(S)
 results, removes duplicates and unsafe literal-local URLs, and passes titles,
 snippets, dates, and source URLs back to Qwen for a final summary. Search
 failures return one short fallback response instead of retrying the network
-inside the tool loop.
+inside the tool loop. The spoken reply remains a short natural summary, while
+the terminal prints the retrieved source titles and URLs separately so the
+answer stays traceable without making TTS read long links aloud.
 
 Web search stays disabled in the baseline profile. The two WSL profiles enable
 it against a loopback-only SearXNG container. Start and verify that service

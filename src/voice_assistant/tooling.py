@@ -15,6 +15,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from voice_assistant.contracts import (
     Message,
+    SourceReference,
     ToolAwareResponse,
     ToolCall,
     ToolCallingLLMProvider,
@@ -27,6 +28,7 @@ from voice_assistant.web_search import WebSearchProvider
 ToolHandler = Callable[[dict[str, Any]], Any]
 ToolIntentMatcher = Callable[[str], bool]
 ToolReplyFormatter = Callable[[Any, str], str]
+ToolSourceExtractor = Callable[[Any], Sequence[SourceReference]]
 NowFactory = Callable[[ZoneInfo], datetime]
 _TOOL_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
 
@@ -41,6 +43,7 @@ class ToolExecution:
     ok: bool
     error_type: str | None = None
     direct_reply: str | None = None
+    source_references: tuple[SourceReference, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,6 +54,7 @@ class _RegisteredTool:
     reply_formatter: ToolReplyFormatter | None = None
     timeout_seconds: float | None = None
     failure_reply: str | None = None
+    source_extractor: ToolSourceExtractor | None = None
 
 
 class ToolRegistry:
@@ -91,6 +95,7 @@ class ToolRegistry:
         reply_formatter: ToolReplyFormatter | None = None,
         timeout_seconds: float | None = None,
         failure_reply: str | None = None,
+        source_extractor: ToolSourceExtractor | None = None,
     ) -> None:
         if not _TOOL_NAME.fullmatch(definition.name):
             raise ValueError(f"Invalid tool name: {definition.name}")
@@ -109,6 +114,7 @@ class ToolRegistry:
             reply_formatter=reply_formatter,
             timeout_seconds=timeout_seconds,
             failure_reply=(failure_reply.strip() if failure_reply else None),
+            source_extractor=source_extractor,
         )
 
     def execute(
@@ -167,6 +173,11 @@ class ToolRegistry:
                 registered.reply_formatter(value, reply_context).strip()
                 or None
             )
+        source_references = (
+            tuple(registered.source_extractor(value))
+            if registered.source_extractor is not None
+            else ()
+        )
         return ToolExecution(
             content=_bounded_json(
                 {"ok": True, "result": value},
@@ -174,6 +185,7 @@ class ToolRegistry:
             ),
             ok=True,
             direct_reply=direct_reply,
+            source_references=source_references,
         )
 
     def _error(
@@ -221,6 +233,11 @@ class BoundedToolLoop:
         self._registry = registry
         self._max_rounds = max_rounds
         self._performance = performance
+        self._source_references: tuple[SourceReference, ...] = ()
+
+    @property
+    def source_references(self) -> tuple[SourceReference, ...]:
+        return self._source_references
 
     def generate(self, messages: Sequence[Message]) -> str:
         conversation = list(messages)
@@ -228,6 +245,9 @@ class BoundedToolLoop:
         tool_calls = 0
         user_text = _last_user_text(messages)
         definitions = self._registry.definitions_for_text(user_text)
+        collected_sources: list[SourceReference] = []
+        seen_source_urls: set[str] = set()
+        self._source_references = ()
 
         with measure_stage(
             self._performance,
@@ -303,6 +323,12 @@ class BoundedToolLoop:
                     conversation.append(
                         Message(role="tool", content=execution.content)
                     )
+                    for source in execution.source_references:
+                        if source.url in seen_source_urls:
+                            continue
+                        seen_source_urls.add(source.url)
+                        collected_sources.append(source)
+                    self._source_references = tuple(collected_sources)
                     if execution.direct_reply is not None:
                         direct_replies.append(
                             (execution.direct_reply, execution.ok)
@@ -421,6 +447,7 @@ def build_builtin_tool_registry(
             intent_matcher=_is_web_search_request,
             timeout_seconds=web_search_timeout_seconds,
             failure_reply="暂时无法联网查询，请稍后再试。",
+            source_extractor=_extract_web_search_sources,
         )
     return registry
 
@@ -519,6 +546,35 @@ def _build_web_search_handler(
         )
 
     return search_web
+
+
+def _extract_web_search_sources(value: Any) -> tuple[SourceReference, ...]:
+    if not isinstance(value, dict):
+        return ()
+    results = value.get("results")
+    if not isinstance(results, list):
+        return ()
+
+    references: list[SourceReference] = []
+    seen_urls: set[str] = set()
+    for result in results:
+        if not isinstance(result, dict):
+            continue
+        title = result.get("title")
+        url = result.get("url")
+        if not isinstance(title, str) or not isinstance(url, str):
+            continue
+        cleaned_title = title.strip()
+        cleaned_url = url.strip()
+        if not cleaned_title or not cleaned_url or cleaned_url in seen_urls:
+            continue
+        seen_urls.add(cleaned_url)
+        references.append(
+            SourceReference(title=cleaned_title, url=cleaned_url)
+        )
+        if len(references) >= 10:
+            break
+    return tuple(references)
 
 
 def _build_time_handler(now_factory: NowFactory) -> ToolHandler:

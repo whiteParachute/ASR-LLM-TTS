@@ -6,10 +6,15 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 from voice_assistant.audio import MicrophoneStreamError
-from voice_assistant.contracts import AudioChunk, PreparedResponse
+from voice_assistant.contracts import (
+    AudioChunk,
+    PreparedResponse,
+    SourceReference,
+)
 from voice_assistant.realtime import (
     RealtimeVoiceAssistant,
     _AudioStreamStats,
+    _print_result,
     _record_audio_stream,
 )
 from voice_assistant.observability import PerformanceLogger, measure_stage
@@ -172,6 +177,35 @@ class FakeStreamingPlayer(FakePlayer):
 
 
 class RealtimeVoiceAssistantTest(unittest.TestCase):
+    @patch("builtins.print")
+    def test_prints_sources_without_adding_them_to_reply(
+        self,
+        print_mock,
+    ) -> None:
+        response = PreparedResponse(
+            transcript="查一下最新消息",
+            reply="有一条新消息。",
+            sources=(
+                SourceReference(
+                    title="消息来源",
+                    url="https://example.com/news",
+                ),
+            ),
+        )
+
+        _print_result(response)
+
+        self.assertEqual(response.reply, "有一条新消息。")
+        self.assertEqual(
+            [call.args[0] for call in print_mock.call_args_list],
+            [
+                "识别文本：查一下最新消息",
+                "模型回复：有一条新消息。",
+                "参考来源：",
+                "  1. 消息来源 - https://example.com/news",
+            ],
+        )
+
     def test_rejects_first_text_chunk_larger_than_later_chunks(self) -> None:
         with self.assertRaisesRegex(ValueError, "cannot exceed"):
             RealtimeVoiceAssistant(
