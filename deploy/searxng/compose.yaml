@@ -3,7 +3,7 @@ name: asr-llm-tts-search
 services:
   searxng:
     container_name: asr-llm-tts-searxng
-    image: docker.io/searxng/searxng:${SEARXNG_VERSION:-latest}
+    image: ghcr.io/searxng/searxng:${SEARXNG_VERSION:-latest}
     restart: unless-stopped
     ports:
       - "127.0.0.1:8080:8080"

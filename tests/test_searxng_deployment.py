@@ -13,6 +13,10 @@ class SearXNGDeploymentTest(unittest.TestCase):
         compose = yaml.safe_load(compose_path.read_text(encoding="utf-8"))
         service = compose["services"]["searxng"]
 
+        self.assertEqual(
+            service["image"],
+            "ghcr.io/searxng/searxng:${SEARXNG_VERSION:-latest}",
+        )
         self.assertEqual(service["ports"], ["127.0.0.1:8080:8080"])
         self.assertIn("SEARXNG_SECRET", service["environment"])
         self.assertNotIn("privileged", service)
