@@ -57,10 +57,10 @@ Planned increments:
 3. ✅ Gate built-in tools by explicit intent and return trusted deterministic
    results without a second LLM round. Ordinary chat no longer carries tool
    schemas.
-4. 🧪 Add a configurable SearXNG web-search adapter with bounded JSON results,
-   intent routing, per-tool timeout, and a one-shot offline fallback. Local
-   mocked tests are complete; Windows deployment against a real instance is
-   pending.
+4. ✅ Add a configurable SearXNG web-search adapter with bounded JSON results,
+   deterministic explicit-intent routing, per-tool timeout, a one-shot offline
+   fallback, and source URLs separated from the spoken reply. Windows WSL
+   acceptance passed against a real local instance and Qwen3.5 summary round.
 5. Add safe page retrieval, source metadata, spoken summaries, and a clear
    offline/error fallback.
 6. Keep network tools disabled unless enabled in configuration.
@@ -68,7 +68,7 @@ Planned increments:
 Acceptance requires answering a current-information question from retrieved
 results, retaining source URLs in logs/output, and never looping indefinitely.
 
-This is the next active milestone.
+Web Search v1 is complete. Safe Page Fetch v1 is the next active milestone.
 
 ## 3. Agent permissions and execution safety
 
