@@ -29,6 +29,7 @@ ToolHandler = Callable[[dict[str, Any]], Any]
 ToolIntentMatcher = Callable[[str], bool]
 ToolReplyFormatter = Callable[[Any, str], str]
 ToolSourceExtractor = Callable[[Any], Sequence[SourceReference]]
+ForcedToolCallBuilder = Callable[[str], ToolCall]
 NowFactory = Callable[[ZoneInfo], datetime]
 _TOOL_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
 
@@ -55,6 +56,7 @@ class _RegisteredTool:
     timeout_seconds: float | None = None
     failure_reply: str | None = None
     source_extractor: ToolSourceExtractor | None = None
+    forced_call_builder: ForcedToolCallBuilder | None = None
 
 
 class ToolRegistry:
@@ -96,6 +98,7 @@ class ToolRegistry:
         timeout_seconds: float | None = None,
         failure_reply: str | None = None,
         source_extractor: ToolSourceExtractor | None = None,
+        forced_call_builder: ForcedToolCallBuilder | None = None,
     ) -> None:
         if not _TOOL_NAME.fullmatch(definition.name):
             raise ValueError(f"Invalid tool name: {definition.name}")
@@ -115,7 +118,20 @@ class ToolRegistry:
             timeout_seconds=timeout_seconds,
             failure_reply=(failure_reply.strip() if failure_reply else None),
             source_extractor=source_extractor,
+            forced_call_builder=forced_call_builder,
         )
+
+    def forced_call_for_text(self, text: str) -> ToolCall | None:
+        builders = [
+            tool.forced_call_builder
+            for tool in self._tools.values()
+            if tool.forced_call_builder is not None
+            and tool.intent_matcher is not None
+            and tool.intent_matcher(text)
+        ]
+        if len(builders) != 1:
+            return None
+        return builders[0](text)
 
     def execute(
         self,
@@ -245,6 +261,7 @@ class BoundedToolLoop:
         tool_calls = 0
         user_text = _last_user_text(messages)
         definitions = self._registry.definitions_for_text(user_text)
+        forced_call = self._registry.forced_call_for_text(user_text)
         collected_sources: list[SourceReference] = []
         seen_source_urls: set[str] = set()
         self._source_references = ()
@@ -262,6 +279,59 @@ class BoundedToolLoop:
                     route="plain",
                     tool_rounds=0,
                     tool_calls=0,
+                    output_chars=len(reply),
+                )
+                return reply
+
+            if forced_call is not None:
+                conversation.append(
+                    Message(
+                        role="assistant",
+                        content="",
+                        tool_calls=(forced_call,),
+                    )
+                )
+                with measure_stage(
+                    self._performance,
+                    "tool_execute",
+                    tool_name=forced_call.name,
+                    tool_round=1,
+                    call_index=1,
+                ) as tool_span:
+                    execution = self._registry.execute(
+                        forced_call,
+                        reply_context=user_text,
+                    )
+                    tool_span.add_fields(
+                        tool_ok=execution.ok,
+                        tool_error_type=execution.error_type,
+                    )
+                conversation.append(
+                    Message(role="tool", content=execution.content)
+                )
+                self._source_references = execution.source_references
+                if execution.direct_reply is not None:
+                    loop_span.add_fields(
+                        route=(
+                            "forced_tool"
+                            if execution.ok
+                            else "tool_fallback"
+                        ),
+                        tool_rounds=1,
+                        tool_calls=1,
+                        direct_reply=True,
+                        output_chars=len(execution.direct_reply),
+                    )
+                    return execution.direct_reply
+
+                reply = self._llm.generate(conversation).strip()
+                if not reply:
+                    raise ToolLoopError("LLM returned an empty tool summary")
+                loop_span.add_fields(
+                    route="forced_tool",
+                    tool_rounds=1,
+                    tool_calls=1,
+                    direct_reply=False,
                     output_chars=len(reply),
                 )
                 return reply
@@ -448,6 +518,7 @@ def build_builtin_tool_registry(
             timeout_seconds=web_search_timeout_seconds,
             failure_reply="暂时无法联网查询，请稍后再试。",
             source_extractor=_extract_web_search_sources,
+            forced_call_builder=_build_forced_web_search_call,
         )
     return registry
 
@@ -474,6 +545,10 @@ _WEB_SEARCH_REQUEST = re.compile(
     r"|(?:现任|目前|当前).{0,16}"
     r"(?:总统|总理|主席|CEO|首席执行官|负责人)"
 )
+_WEB_SEARCH_PREFIX = re.compile(
+    r"^(?:请|麻烦)?(?:帮我)?(?:联网|上网|网上)?"
+    r"(?:搜一下|搜索一下|搜索|查一下|查一查|查询一下|查询)?"
+)
 
 
 def _last_user_text(messages: Sequence[Message]) -> str:
@@ -496,6 +571,18 @@ def _is_calculation_request(text: str) -> bool:
 
 def _is_web_search_request(text: str) -> bool:
     return bool(_WEB_SEARCH_REQUEST.search(text))
+
+
+def _build_forced_web_search_call(text: str) -> ToolCall:
+    query = _WEB_SEARCH_PREFIX.sub("", text).strip(" ，。？！") or text
+    arguments: dict[str, Any] = {"query": query}
+    if re.search(r"今天|今日|昨天|昨日|最新|刚刚", text):
+        arguments["time_range"] = "day"
+    elif re.search(r"本月|最近一个月", text):
+        arguments["time_range"] = "month"
+    elif re.search(r"今年|最近一年", text):
+        arguments["time_range"] = "year"
+    return ToolCall(name="web_search", arguments=arguments)
 
 
 def _format_time_reply(result: Any, question: str) -> str:

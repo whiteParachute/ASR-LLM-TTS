@@ -152,6 +152,9 @@ failures return one short fallback response instead of retrying the network
 inside the tool loop. The spoken reply remains a short natural summary, while
 the terminal prints the retrieved source titles and URLs separately so the
 answer stays traceable without making TTS read long links aloud.
+Explicit search intent is executed deterministically before summarization, so a
+small local LLM cannot skip retrieval and answer a current-information question
+from its weights. This also removes the first LLM tool-selection round.
 
 Web search stays disabled in the baseline profile. The two WSL profiles enable
 it against a loopback-only SearXNG container. Start and verify that service

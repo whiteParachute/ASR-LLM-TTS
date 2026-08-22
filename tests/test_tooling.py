@@ -307,7 +307,7 @@ class ToolingTest(unittest.TestCase):
         self.assertEqual(followup[-2].role, "assistant")
         self.assertEqual(followup[-1].role, "tool")
 
-    def test_routes_web_search_through_native_summary_round(self) -> None:
+    def test_forces_explicit_web_search_before_summary_round(self) -> None:
         web_search = FakeWebSearch()
         registry = build_builtin_tool_registry(
             timeout_seconds=1,
@@ -316,20 +316,8 @@ class ToolingTest(unittest.TestCase):
             web_search_timeout_seconds=2,
         )
         llm = FakeToolLLM(
-            [
-                ToolAwareResponse(
-                    tool_calls=(
-                        ToolCall(
-                            name="web_search",
-                            arguments={
-                                "query": "最新 AI 新闻",
-                                "time_range": "day",
-                            },
-                        ),
-                    )
-                ),
-                ToolAwareResponse(content="今天有一条新的AI消息。"),
-            ]
+            [],
+            plain_reply="今天有一条新的AI消息。",
         )
         loop = BoundedToolLoop(llm, registry, max_rounds=2)
 
@@ -338,13 +326,11 @@ class ToolingTest(unittest.TestCase):
         )
 
         self.assertEqual(reply, "今天有一条新的AI消息。")
-        self.assertEqual(web_search.query, "最新 AI 新闻")
+        self.assertEqual(web_search.query, "最新AI新闻")
         self.assertEqual(web_search.time_range, "day")
-        self.assertEqual(
-            [definition.name for definition in llm.tools[0]],
-            ["web_search"],
-        )
-        tool_result = json.loads(llm.conversations[1][-1].content)
+        self.assertEqual(llm.conversations, [])
+        self.assertEqual(len(llm.plain_conversations), 1)
+        tool_result = json.loads(llm.plain_conversations[0][-1].content)
         self.assertEqual(
             tool_result["result"]["results"][0]["url"],
             "https://example.com/news",
@@ -366,18 +352,7 @@ class ToolingTest(unittest.TestCase):
             web_search=FailingWebSearch(),
             web_search_timeout_seconds=2,
         )
-        llm = FakeToolLLM(
-            [
-                ToolAwareResponse(
-                    tool_calls=(
-                        ToolCall(
-                            name="web_search",
-                            arguments={"query": "最新 AI 新闻"},
-                        ),
-                    )
-                )
-            ]
-        )
+        llm = FakeToolLLM([])
         loop = BoundedToolLoop(llm, registry, max_rounds=3)
 
         reply = loop.generate(
@@ -385,7 +360,8 @@ class ToolingTest(unittest.TestCase):
         )
 
         self.assertEqual(reply, "暂时无法联网查询，请稍后再试。")
-        self.assertEqual(len(llm.conversations), 1)
+        self.assertEqual(llm.conversations, [])
+        self.assertEqual(llm.plain_conversations, [])
 
     def test_rejects_invalid_web_search_time_range_before_execution(
         self,
